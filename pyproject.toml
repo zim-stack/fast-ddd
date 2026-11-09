@@ -36,6 +36,7 @@ packages = ["src/fast_ddd"]
 [dependency-groups]
 docs = [
     "griffe-typingdoc>=0.3.2",
+    "mike>=2.2.0",
     "mkdocs>=1.6.1",
     "mkdocs-awesome-pages-plugin>=2.10.1",
     "mkdocs-drawio>=1.16.3",

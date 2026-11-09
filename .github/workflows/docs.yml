@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version-file: ".python-version"
@@ -20,4 +22,15 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
       - run: uv sync --locked --only-group docs
-      - run: uv run --no-sync mkdocs gh-deploy --force --strict
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      - name: Read version from pyproject.toml
+        id: version
+        run: echo "version=$(uv run --no-sync python -c \"import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])\")" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy production docs
+        run: |
+          uv run --no-sync mike deploy --push --update-aliases ${{ steps.version.outputs.version }} latest
+          uv run --no-sync mike set-default --push latest

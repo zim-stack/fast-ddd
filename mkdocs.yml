@@ -31,6 +31,7 @@ plugins:
             show_signature_annotations: true
             extensions:
               - griffe_typingdoc
+  - mike
 
 theme:
   name: material
@@ -40,6 +41,12 @@ theme:
 extra:
   project_name: fast-ddd
   import_name: fast_ddd
+  #  https://squidfunk.github.io/mkdocs-material/setup/setting-up-versioning/
+  version:
+    provider: mike
+    alias: true
+    default: latest
+
 
 extra_javascript:
   - https://viewer.diagrams.net/js/viewer-static.min.js
