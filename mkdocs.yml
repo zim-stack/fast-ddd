@@ -1,0 +1,9 @@
+site_name: fast-ddd Docs
+site_url: https://zim-stack.github.io/fast-ddd/
+repo_url: https://github.com/zim-stack/fast-ddd
+repo_name: zim-stack/fast-ddd
+
+theme:
+  name: material
+  features:
+    - content.code.copy

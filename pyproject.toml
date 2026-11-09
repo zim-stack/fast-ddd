@@ -33,6 +33,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/fast-ddd"]
 
+[dependency-groups]
+docs = [
+    "mkdocs>=1.6.1",
+    "mkdocs-material>=9.8.1",
+]
+
 [project.urls]
 Homepage = "https://github.com/zim-stack/fast-ddd"
 Repository = "https://github.com/zim-stack/fast-ddd"
