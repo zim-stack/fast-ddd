@@ -34,20 +34,4 @@ def define_env(env):
     #     "Reverse a string (and uppercase)"
     #     return x.upper()[::-1]
 
-    @env.macro
-    def render_python_api(bc_name: str):
-        """
-        Generate documentation from docstrings and type hints
-        for all classes, functions, and variables in that module
-        """
-        return f"""# Python API
-
-::: astt.bc.{bc_name.lower()}
-    options:
-          show_submodules: true
-          show_source: true             # Show source code links
-"""
-
-    @env.macro
-    def render_bc_overview(bc_name: str):
-        return f"# Overview"
+    pass

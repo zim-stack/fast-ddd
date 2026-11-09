@@ -5,9 +5,9 @@ nav:
   - tutorial
   - concepts
   - how-to
-#  - reference - Todo uncomment after the mkdocstrings runs
+  - reference
   - FAQ: faq.md
   - glossary.md
   - references.md
   - about
-  - diagram-test.md  # Todo remove example
+  - diagram-test.md  # Todo remove example after at least one real diagram exists

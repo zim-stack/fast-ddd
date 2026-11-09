@@ -14,15 +14,23 @@ plugins:
       darkmode: true
       edit: false
   # https://mkdocstrings.github.io/python/usage/
-#  - mkdocstrings:
-#      handlers:
-#        python:
-#          paths: [ . ]
-#          options:
-#            docstring_style: sphinx
-#            show_source: false
-#          extensions:
-#            - griffe_typingdoc
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [ ./src ]
+          options:
+            docstring_style: sphinx
+            docstring_section_style: spacy
+            show_source: false
+            show_root_heading: false # module name visibility
+            show_root_full_path: false
+            merge_init_into_class: false
+            members_order: source
+            group_by_category: true
+            show_signature: true
+            show_signature_annotations: true
+            extensions:
+              - griffe_typingdoc
 
 theme:
   name: material
