@@ -10,6 +10,9 @@ plugins:
   - awesome-pages
   - macros:
       module_name: docs/_macros/main
+  - drawio:
+      darkmode: true
+      edit: false
   # https://mkdocstrings.github.io/python/usage/
 #  - mkdocstrings:
 #      handlers:
@@ -30,5 +33,10 @@ extra:
   project_name: fast-ddd
   import_name: fast_ddd
 
+extra_javascript:
+  - https://viewer.diagrams.net/js/viewer-static.min.js
+  - _javascripts/drawio-reload.js
+
 exclude_docs: |
   _macros/
+  _javascripts/
