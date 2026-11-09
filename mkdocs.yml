@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
 
-site_name: fast-ddd Docs
+site_name: FastDDD Docs
 site_url: https://zim-stack.github.io/fast-ddd/
 repo_url: https://github.com/zim-stack/fast-ddd
 repo_name: zim-stack/fast-ddd
@@ -51,13 +51,17 @@ markdown_extensions:
   - pymdownx.highlight: # Syntax highlighting through Pygments, with line numbers, auto titles, and line anchors.
       anchor_linenums: true
       use_pygments: true
-      auto_title: true
+#      auto_title: true
       linenums: true
       linenums_style: table
       line_spans: __span
   - pymdownx.superfences # Fenced code blocks, nested fences, and custom fences such as Mermaid diagrams.
   - pymdownx.keys # Renders keyboard shortcuts such as ++ctrl+alt+del++.
   - pymdownx.snippets # 	Includes content from other files with --8<-- "path".
+
+extra_css:
+  - _stylesheets/code-light.css
+  - _stylesheets/code-dark.css
 
 theme:
   name: material
@@ -85,7 +89,7 @@ theme:
     - navigation.footer # adds previous and next links at the bottom.
     # Table of contents and header
     - toc.follow # keeps the active section visible in the sidebar while scrolling.
-    - header.autohide # hides the header when scrolling down.
+#    - header.autohide # hides the header when scrolling down.
     # Search
     - search.suggest # shows suggestions while typing
     - search.highlight # highlights matches on the page

@@ -51,6 +51,8 @@ class PayOrderPayload:
     order_id: int
     
 class PayOrderCommand:
+    """Application service"""
+    
     def __init__(self, uow: Uow):
         self._uow = uow
     

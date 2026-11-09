@@ -43,6 +43,7 @@ docs = [
     "mkdocs-macros-plugin>=1.5.0",
     "mkdocs-material>=9.8.1",
     "mkdocstrings[python]>=1.0.8",
+    "pygments-styles>=0.3.0",
 ]
 
 [project.urls]
