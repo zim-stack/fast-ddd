@@ -134,6 +134,7 @@ extra:
 extra_javascript:
   - https://viewer.diagrams.net/js/viewer-static.min.js
   - _javascripts/drawio-reload.js
+  - _javascripts/repo-new-tab.js
 
 exclude_docs: |
   _macros/
