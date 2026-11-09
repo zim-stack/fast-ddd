@@ -1,9 +1,34 @@
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
 site_name: fast-ddd Docs
 site_url: https://zim-stack.github.io/fast-ddd/
 repo_url: https://github.com/zim-stack/fast-ddd
 repo_name: zim-stack/fast-ddd
 
+plugins:
+  - search
+  - awesome-pages
+  - macros:
+      module_name: docs/_macros/main
+  # https://mkdocstrings.github.io/python/usage/
+#  - mkdocstrings:
+#      handlers:
+#        python:
+#          paths: [ . ]
+#          options:
+#            docstring_style: sphinx
+#            show_source: false
+#          extensions:
+#            - griffe_typingdoc
+
 theme:
   name: material
   features:
     - content.code.copy
+
+extra:
+  project_name: fast-ddd
+  import_name: fast_ddd
+
+exclude_docs: |
+  _macros/

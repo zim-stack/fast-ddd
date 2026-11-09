@@ -1,0 +1,11 @@
+title: Tutorial
+
+nav:
+  - index.md
+  - modeling-the-domain.md
+  - entities-and-value-objects.md
+  - aggregates-and-invariants.md
+  - repositories.md
+  - unit-of-work.md
+  - persistence-mapping.md
+  - testing.md

@@ -1,0 +1,8 @@
+#generated API docs (mkdocstrings)
+#
+#│   ├── aggregate.md
+#│   ├── entity.md
+#│   ├── value-object.md
+#│   ├── repository.md
+#│   ├── unit-of-work.md
+#│   └── exceptions.md

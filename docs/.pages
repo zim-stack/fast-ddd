@@ -1,0 +1,12 @@
+nav:
+  - Home: index.md
+  - Motivation: motivation.md
+  - getting-started.md
+  - tutorial
+  - concepts
+  - how-to
+#  - reference - Todo uncomment after the mkdocstrings runs
+  - FAQ: faq.md
+  - glossary.md
+  - references.md
+  - about
