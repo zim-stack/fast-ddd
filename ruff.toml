@@ -1,0 +1,34 @@
+# https://docs.astral.sh/ruff/linter/#rule-selection
+# IDE uses this file
+exclude = [
+    "__pycache__",
+    "migrations",
+    "docs",
+]
+
+[lint]
+ignore = [
+#    "F401",
+#    "F841",
+]
+select = [
+#    "E", # black handles formatting
+#    "W", # black handles formatting or applied flag "--extend-select W" in lefthook
+    "F",
+    "I",
+    "C",
+    "UP",
+]
+
+[lint.per-file-ignores]
+"__init__.py" = [
+    "F401",
+    "F403",
+]
+"tests/**" = [
+#    "F401",
+#    "F841",
+]
+"alchemy_manifest.py" = [
+    "F401",
+]

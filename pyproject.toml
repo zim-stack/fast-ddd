@@ -34,6 +34,13 @@ build-backend = "hatchling.build"
 packages = ["src/fast_ddd"]
 
 [dependency-groups]
+dev = [
+    "black>=26.10.1",
+    "mypy>=2.4.1", # for sqlalchemy type checking only
+    "pyrefly>=1.4.1",
+    "ruff>=0.17.4",
+    "tach>=0.35.3",
+]
 docs = [
     "griffe-typingdoc>=0.3.2",
     "mike>=2.2.0",
