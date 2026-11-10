@@ -19,8 +19,8 @@ plugins:
         python:
           paths: [ ./src ]
           options:
-            docstring_style: sphinx
-            docstring_section_style: spacy
+            docstring_style: google # `sphinx` does not support Examples section
+            docstring_section_style: list
             show_source: false
             show_root_heading: false # module name visibility
             show_root_full_path: false
@@ -51,7 +51,7 @@ markdown_extensions:
   - pymdownx.highlight: # Syntax highlighting through Pygments, with line numbers, auto titles, and line anchors.
       anchor_linenums: true
       use_pygments: true
-#      auto_title: true
+      #      auto_title: true
       linenums: true
       linenums_style: table
       line_spans: __span
@@ -85,11 +85,11 @@ theme:
     - navigation.path # adds breadcrumbs
     - navigation.indexes # lets a section title link to its index page.
     - navigation.tabs.sticky # keeps the tab bar visible while scrolling.
-#    - navigation.top # adds a back-to-top button
+    #    - navigation.top # adds a back-to-top button
     - navigation.footer # adds previous and next links at the bottom.
     # Table of contents and header
     - toc.follow # keeps the active section visible in the sidebar while scrolling.
-#    - header.autohide # hides the header when scrolling down.
+    #    - header.autohide # hides the header when scrolling down.
     # Search
     - search.suggest # shows suggestions while typing
     - search.highlight # highlights matches on the page

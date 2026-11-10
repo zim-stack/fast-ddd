@@ -10,4 +10,4 @@
 title: API Reference
 
 nav:
-  - Aggregate: my-test-class.md # Todo replace with real api
+  - entity.md
