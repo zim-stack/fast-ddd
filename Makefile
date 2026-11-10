@@ -75,3 +75,15 @@ check.all: ## Run all static checks manually
 check.watch: ## Run all static checks in watch mode
 	#watchexec -e py 'clear && make check.all FIX=""'
 	watchexec -e py 'clear && make check.all'
+
+.PHONY: lefthook.install
+lefthook.install: ## Install pre-commit hooks
+	uv run lefthook install
+
+.PHONY: lefthook.command
+lefthook.command: ## Run single commit-msg command (example lint)
+	uv run lefthook run commit-msg --commands lint
+
+.PHONY: lefthook.run
+lefthook.run: ## Run commit-msg hook
+	uv run lefthook run commit-msg

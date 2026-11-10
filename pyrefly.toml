@@ -5,4 +5,8 @@ project-excludes = [
 ]
 infer-with-first-use = false
 
-search-path = ["src", "tests", "scripts"] # src is default
+search-path = [
+    "src", # src is default
+    "tests",
+#    "scripts"
+]

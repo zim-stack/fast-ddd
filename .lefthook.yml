@@ -1,0 +1,33 @@
+# https://git-scm.com/docs/githooks
+# This hook is invoked by git-commit and git-merge,
+commit-msg:
+  follow: true
+  commands:
+    format:
+      glob: "*.py"
+      run: uv run black {staged_files}
+      stage_fixed: true # re-stage fixes
+    lint:
+      glob: "*.py"
+      run: uv run ruff check --extend-select W --fix {staged_files}
+      stage_fixed: true
+    pyrefly:
+      run: uv run pyrefly check
+    mypy:
+      run: uv run mypy
+#    tach: # Todo uncomment when have modules defined
+#      run: |
+#        uv run tach check
+#        uv run make tach.show
+
+# Todo uncomment when have tests
+#pre-push:
+#  follow: true
+#  piped: true
+#  commands:
+#    test-unit:
+#      run: |
+#        time uv run pytest -x -n auto -q --tb=short -W error tests/unit
+#    test-integration:
+#      run: |
+#        time uv run pytest -x -n auto -q --tb=short -W error tests/integration

@@ -36,6 +36,7 @@ packages = ["src/fast_ddd"]
 [dependency-groups]
 dev = [
     "black>=26.10.1",
+    "lefthook>=2.2.2",
     "mypy>=2.4.1", # for sqlalchemy type checking only
     "pyrefly>=1.4.1",
     "pytest>=9.2.0",
