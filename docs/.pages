@@ -1,0 +1,13 @@
+nav:
+  - Home: index.md
+  - Motivation: motivation.md
+  - getting-started.md
+  - tutorial
+  - concepts
+  - how-to
+  - reference
+  - FAQ: faq.md
+  - glossary.md
+  - references.md
+  - about
+  - diagram-test.md  # Todo remove example after at least one real diagram exists

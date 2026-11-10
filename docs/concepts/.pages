@@ -1,0 +1,9 @@
+title: Concepts
+
+nav:
+  - active-record-vs-data-mapper.md
+  - DDD Primer: ddd-primer.md
+  - aggregates-and-boundaries.md
+  - persistence-ignorance.md
+  - transactions-and-consistency.md
+  - when-not-to-use-this.md

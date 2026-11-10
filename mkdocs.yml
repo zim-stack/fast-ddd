@@ -1,9 +1,140 @@
-site_name: fast-ddd Docs
+# yaml-language-server: $schema=https://squidfunk.github.io/mkdocs-material/schema.json
+
+site_name: FastDDD Docs
 site_url: https://zim-stack.github.io/fast-ddd/
 repo_url: https://github.com/zim-stack/fast-ddd
 repo_name: zim-stack/fast-ddd
 
+plugins:
+  - search
+  - awesome-pages
+  - macros:
+      module_name: docs/_macros/main
+  - drawio:
+      darkmode: true
+      edit: false
+  # https://mkdocstrings.github.io/python/usage/
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [ ./src ]
+          options:
+            docstring_style: sphinx
+            docstring_section_style: spacy
+            show_source: false
+            show_root_heading: false # module name visibility
+            show_root_full_path: false
+            merge_init_into_class: false
+            members_order: source
+            group_by_category: true
+            show_signature: true
+            show_signature_annotations: true
+            extensions:
+              - griffe_typingdoc
+  - mike
+
+markdown_extensions:
+  # https://squidfunk.github.io/mkdocs-material/reference/tooltips/#adding-abbreviations
+  - abbr # Adds hover tooltips for abbreviations defined with *[HTML]: ....
+  - attr_list
+  - pymdownx.snippets
+  - def_list
+  - footnotes # Supports [^1]-style footnotes.
+  - md_in_html # Allows Markdown inside HTML blocks, such as <div markdown>.
+  - toc: # Adds clickable anchor links to headings.
+      permalink: true
+  - tables # Enables pipe-syntax tables.
+  - pymdownx.betterem # Improves handling of bold and italic, especially inside words.
+  - pymdownx.blocks.caption # Adds captions to images and tables with /// caption blocks.
+  - pymdownx.critic: # Renders {++added++}, {--removed--}, and {>>comment<<} markup as a read-only view of changes.
+      mode: view
+  - pymdownx.highlight: # Syntax highlighting through Pygments, with line numbers, auto titles, and line anchors.
+      anchor_linenums: true
+      use_pygments: true
+#      auto_title: true
+      linenums: true
+      linenums_style: table
+      line_spans: __span
+  - pymdownx.superfences # Fenced code blocks, nested fences, and custom fences such as Mermaid diagrams.
+  - pymdownx.keys # Renders keyboard shortcuts such as ++ctrl+alt+del++.
+  - pymdownx.snippets # 	Includes content from other files with --8<-- "path".
+
+extra_css:
+  - _stylesheets/code-light.css
+  - _stylesheets/code-dark.css
+
 theme:
   name: material
+  #  logo: assets/logo.png
+  #  favicon: images/favicon.png
+  language: en
+  icon:
+    repo: octicons/git-merge-16
+  font:
+    text: Source Sans 3
+    code: Source Code Pro
   features:
     - content.code.copy
+    # Navigation
+    - navigation.instant # makes page loads feel like a single-page app
+    - navigation.instant.prefetch # preloads pages on hover
+    - navigation.instant.progress # shows a loading bar
+    - navigation.tabs # puts top-level sections in a tab bar
+    - navigation.sections # groups sidebar sections.
+    - navigation.prune # renders only visible navigation entries, which reduces page size
+    - navigation.path # adds breadcrumbs
+    - navigation.indexes # lets a section title link to its index page.
+    - navigation.tabs.sticky # keeps the tab bar visible while scrolling.
+#    - navigation.top # adds a back-to-top button
+    - navigation.footer # adds previous and next links at the bottom.
+    # Table of contents and header
+    - toc.follow # keeps the active section visible in the sidebar while scrolling.
+#    - header.autohide # hides the header when scrolling down.
+    # Search
+    - search.suggest # shows suggestions while typing
+    - search.highlight # highlights matches on the page
+    - search.share # adds a link that opens search results
+    - pymdownx.details # enables collapsible admonitions with ??? and ???+ syntax.
+
+  palette:
+    # Palette toggle for automatic mode
+    - media: "(prefers-color-scheme)"
+      toggle:
+        icon: material/brightness-auto
+        name: Switch to system preference
+
+    # Palette toggle for light mode
+    - scheme: default
+      media: "(prefers-color-scheme: light)"
+      primary: grey
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+
+    # Palette toggle for dark mode
+    - scheme: slate
+      media: "(prefers-color-scheme: dark)"
+      primary: black
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+
+extra:
+  project_name: fast-ddd
+  import_name: fast_ddd
+  #  https://squidfunk.github.io/mkdocs-material/setup/setting-up-versioning/
+  version:
+    provider: mike
+    alias: true
+    default: latest
+
+
+extra_javascript:
+  - https://viewer.diagrams.net/js/viewer-static.min.js
+  - _javascripts/drawio-reload.js
+  - _javascripts/repo-new-tab.js
+
+exclude_docs: |
+  _macros/

@@ -1,0 +1,13 @@
+#generated API docs (mkdocstrings)
+#
+#│   ├── aggregate.md
+#│   ├── entity.md
+#│   ├── value-object.md
+#│   ├── repository.md
+#│   ├── unit-of-work.md
+#│   └── exceptions.md
+
+title: API Reference
+
+nav:
+  - Aggregate: my-test-class.md # Todo replace with real api
