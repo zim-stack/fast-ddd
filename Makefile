@@ -1,3 +1,7 @@
+# -------------------------------------------
+# Docs
+# -------------------------------------------
+
 .PHONY: docs.install
 docs.install: ## Example install docs dependency
 	uv add --group docs <dependency>
@@ -36,3 +40,50 @@ docs.list-versions: ## List all published docs versions on gh-pages
 docs.pygmentize-css: ## Generate light and dark Pygments CSS for MkDocs Material (uses DARK and LIGHT style names from https://pygments-styles.org)
 	uv run pygmentize -S $(DARK) -f html -a '[data-md-color-scheme="slate"] .highlight' > docs/_stylesheets/code-dark.css
 	uv run pygmentize -S $(LIGHT) -f html -a '[data-md-color-scheme="default"] .highlight' > docs/_stylesheets/code-light.css
+
+# -------------------------------------------
+# Code quality
+# -------------------------------------------
+
+.PHONY: tach.sync
+tach.sync:  ## Sync dependency rules with actual code
+	uv run tach sync
+
+.PHONY: tach.check
+tach.check:  ## Check that module boundaries are respected
+	uv run tach check
+
+.PHONY: tach.show
+tach.show: ## Generate graph of allowed architecture
+	uv run tach show --mermaid -o reports/tach_module_graph.mmd
+
+.PHONY: tach.watch
+tach.watch: ## Watch tach check errors during development
+	watchexec -e py uv run tach check 2>&1 | grep -v "Skipped.*syntax error\|Command exited" || true
+
+FIX ?= --fix
+.PHONY: check.all
+check.all: ## Run all static checks manually
+	EXIT_CODE=0; \
+	uv run ruff check $(FIX) || EXIT_CODE=1; \
+	uv run pyrefly check || EXIT_CODE=1; \
+	uv run mypy || EXIT_CODE=1; \
+	uv run tach check || EXIT_CODE=1; \
+	exit $$EXIT_CODE
+
+.PHONY: check.watch
+check.watch: ## Run all static checks in watch mode
+	#watchexec -e py 'clear && make check.all FIX=""'
+	watchexec -e py 'clear && make check.all'
+
+.PHONY: lefthook.install
+lefthook.install: ## Install pre-commit hooks
+	uv run lefthook install
+
+.PHONY: lefthook.command
+lefthook.command: ## Run single commit-msg command (example lint)
+	uv run lefthook run commit-msg --commands lint
+
+.PHONY: lefthook.run
+lefthook.run: ## Run commit-msg hook
+	uv run lefthook run commit-msg

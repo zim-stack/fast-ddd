@@ -1,0 +1,12 @@
+project-excludes = [
+    "**/__pycache__",
+    ".venv",
+    "docs",
+]
+infer-with-first-use = false
+
+search-path = [
+    "src", # src is default
+    "tests",
+#    "scripts"
+]
