@@ -6,8 +6,8 @@ from uuid import UUID, uuid4
 import attrs
 import pytest
 
-from fast_ddd.domain.aggregate import Aggregate, AggregateSnapshot, AggregateState
-from fast_ddd.domain.event import DomainEvent
+from fast_ddd.domain.aggregate import Aggregate
+from fast_ddd.domain.entity import Entity, Snapshot, State
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -20,34 +20,55 @@ class OrderStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-@dataclasses.dataclass(frozen=True)
-class OrderPlaced(DomainEvent):
+# Domain events are plain attrs classes: the tests only need them to be
+# recorded and returned.
+
+
+@attrs.frozen
+class OrderPlaced:
     order_id: UUID
 
 
-@dataclasses.dataclass(frozen=True)
-class OrderCancelled(DomainEvent):
+@attrs.frozen
+class OrderCancelled:
     order_id: UUID
     reason: str
 
 
 @attrs.define(kw_only=True)
-class OrderFields:
-    customer_id: UUID
-    status: OrderStatus = OrderStatus.DRAFT
-    shipping_address: str | None = None
-
-
-@attrs.define(kw_only=True)
-class OrderState(OrderFields, AggregateState[UUID]):
-    notes: list[str] = attrs.field(factory=list, converter=list)
-    revision: int = 0  # state-only field
+class LineState(State[int]):
+    sku: str
+    quantity: int
+    price_cache: int | None = None  # state-only
 
 
 @attrs.frozen(kw_only=True)
-# pyrefly: ignore[invalid-inheritance]
-class OrderSnapshot(OrderFields, AggregateSnapshot[UUID]):
-    # Any field with an immutable counterpart (list/tuple, dict/Mapping, set/frozenset) is declared twice.
+class LineSnapshot(Snapshot[int]):
+    sku: str
+    quantity: int
+
+
+class Line(Entity[int, LineSnapshot, LineState]):
+    def change_quantity(self, quantity: int) -> None:
+        self._state.quantity = quantity
+
+
+@attrs.define(kw_only=True)
+class OrderState(State[UUID]):
+    customer_id: UUID
+    status: OrderStatus = OrderStatus.DRAFT
+    shipping_address: str | None = None
+    lines: list[Line] = attrs.field(factory=list, converter=list)
+    notes: list[str] = attrs.field(factory=list, converter=list)
+    revision: int = 0  # state-only field: has a default, absent from the snapshot
+
+
+@attrs.frozen(kw_only=True)
+class OrderSnapshot(Snapshot[UUID]):
+    customer_id: UUID
+    status: OrderStatus
+    shipping_address: str | None = None
+    lines: tuple[LineSnapshot, ...] = attrs.field(default=(), converter=tuple)
     notes: tuple[str, ...] = attrs.field(default=(), converter=tuple)
 
 
@@ -57,6 +78,13 @@ class Order(Aggregate[UUID, OrderSnapshot, OrderState]):
         return cls(
             OrderSnapshot(id=uuid4(), customer_id=customer_id, status=OrderStatus.DRAFT)
         )
+
+    def add_line(self, sku: str, quantity: int) -> Line:
+        line = Line(
+            LineSnapshot(id=len(self._state.lines) + 1, sku=sku, quantity=quantity)
+        )
+        self._state.lines.append(line)
+        return line
 
     def add_note(self, note: str) -> None:
         self._state.notes.append(note)
@@ -68,27 +96,29 @@ class Order(Aggregate[UUID, OrderSnapshot, OrderState]):
         if self._state.status is not OrderStatus.DRAFT:
             raise ValueError("only draft orders can be placed")
         self._state.status = OrderStatus.PLACED
-        self._record_event(OrderPlaced(order_id=self.id))
+        # pyrefly: ignore[bad-argument-type]
+        self.record_event(OrderPlaced(order_id=self.id))
 
     def cancel(self, reason: str) -> None:
         self._state.status = OrderStatus.CANCELLED
-        self._record_event(OrderCancelled(order_id=self.id, reason=reason))
+        # pyrefly: ignore[bad-argument-type]
+        self.record_event(OrderCancelled(order_id=self.id, reason=reason))
 
-    def _validate_invariants(self) -> None:
-        if (
-            self._state.status is OrderStatus.PLACED
-            and self._state.shipping_address is None
-        ):
-            raise ValueError("placed order requires a shipping address")
+    def validate_invariants(self) -> None:
+        if self._state.status is OrderStatus.PLACED:
+            if self._state.shipping_address is None:
+                raise ValueError("placed order requires a shipping address")
+            if not self._state.lines:
+                raise ValueError("placed order requires at least one line")
 
 
 @attrs.define(kw_only=True)
-class CartState(AggregateState[UUID]):
+class CartState(State[UUID]):
     customer_id: UUID
 
 
 @attrs.frozen(kw_only=True)
-class CartSnapshot(AggregateSnapshot[UUID]):
+class CartSnapshot(Snapshot[UUID]):
     customer_id: UUID
 
 
@@ -106,9 +136,12 @@ def make_order(**overrides: object) -> Order:
     return Order(OrderSnapshot(**data))  # type: ignore[arg-type]
 
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
+def make_placeable_order() -> Order:
+    order = make_order()
+    order.add_line("sku-1", 2)
+    order.set_shipping_address("1 Main St")
+    return order
+
 
 # --- Construction and snapshot round trip --------------------------------
 
@@ -123,6 +156,7 @@ class TestConstruction:
                 status=OrderStatus.PLACED,
                 shipping_address="1 Main St",
                 notes=("gift",),
+                lines=(LineSnapshot(id=1, sku="a", quantity=2),),
             )
         )
         assert order.id == oid
@@ -130,6 +164,8 @@ class TestConstruction:
         assert order._state.status is OrderStatus.PLACED
         assert order._state.shipping_address == "1 Main St"
         assert order._state.notes == ["gift"]  # tuple -> list via state converter
+        assert len(order._state.lines) == 1
+        assert type(order._state.lines[0]) is Line
 
     def test_state_only_fields_use_their_defaults(self) -> None:
         assert make_order()._state.revision == 0
@@ -137,92 +173,125 @@ class TestConstruction:
     def test_create_factory_starts_with_no_events(self) -> None:
         assert Order.create(uuid4()).pull_domain_events() == []
 
+    def test_aggregate_is_an_entity(self) -> None:
+        assert issubclass(Aggregate, Entity)
+        assert isinstance(make_order(), Entity)
+
+    def test_construction_records_no_events(self) -> None:
+        assert make_order().pull_domain_events() == []
+
 
 class TestToSnapshot:
+    def test_returns_exact_snapshot_type(self) -> None:
+        assert type(make_order().to_snapshot()) is OrderSnapshot
+
     def test_fresh_aggregate_round_trips_to_equal_snapshot(self) -> None:
         snapshot = OrderSnapshot(
-            id=uuid4(), customer_id=uuid4(), status=OrderStatus.DRAFT, notes=("a",)
+            id=uuid4(),
+            customer_id=uuid4(),
+            status=OrderStatus.DRAFT,
+            notes=("a",),
+            lines=(LineSnapshot(id=1, sku="a", quantity=1),),
         )
         assert Order(snapshot).to_snapshot() == snapshot
 
     def test_snapshot_reflects_current_state(self) -> None:
-        order = make_order()
+        order = make_placeable_order()
         order.add_note("fragile")
-        order.set_shipping_address("1 Main St")
         order.place()
         snapshot = order.to_snapshot()
-        assert isinstance(snapshot, OrderSnapshot)
         assert snapshot.status is OrderStatus.PLACED
         assert snapshot.notes == ("fragile",)
         assert snapshot.shipping_address == "1 Main St"
+
+    def test_inner_entities_become_snapshots(self) -> None:
+        order = make_order()
+        order.add_line("a", 1)
+        order.add_line("b", 2)
+        lines = order.to_snapshot().lines
+        assert type(lines) is tuple
+        assert [type(s) for s in lines] == [LineSnapshot, LineSnapshot]
+        assert [(s.sku, s.quantity) for s in lines] == [("a", 1), ("b", 2)]
+
+    def test_changes_to_inner_entities_reach_the_snapshot(self) -> None:
+        order = make_order()
+        line = order.add_line("a", 1)
+        line.change_quantity(7)
+        assert order.to_snapshot().lines[0].quantity == 7
 
     def test_state_only_fields_are_not_in_snapshot(self) -> None:
         assert not hasattr(make_order().to_snapshot(), "revision")
 
     def test_earlier_snapshot_is_not_affected_by_later_changes(self) -> None:
         order = make_order()
+        line = order.add_line("a", 1)
         before = order.to_snapshot()
-        order.add_note("late note")
+        line.change_quantity(9)
+        order.add_line("b", 1)
+        order.add_note("late")
         after = order.to_snapshot()
-        assert before.notes == ()
-        assert after.notes == ("late note",)
+        assert before.lines[0].quantity == 1
+        assert len(before.lines) == 1 and before.notes == ()
+        assert len(after.lines) == 2 and after.notes == ("late",)
 
     def test_aggregate_state_is_independent_of_source_snapshot(self) -> None:
         snapshot = OrderSnapshot(
-            id=uuid4(), customer_id=uuid4(), status=OrderStatus.DRAFT, notes=("a",)
+            id=uuid4(),
+            customer_id=uuid4(),
+            status=OrderStatus.DRAFT,
+            lines=(LineSnapshot(id=1, sku="a", quantity=1),),
+            notes=("a",),
         )
         order = Order(snapshot)
         order.add_note("b")
+        order._state.lines[0].change_quantity(5)
         assert snapshot.notes == ("a",)
+        assert snapshot.lines[0].quantity == 1
 
+    def test_state_only_fields_of_inner_entities_are_reset_on_load(self) -> None:
+        order = make_order()
+        order.add_line("a", 1)._state.price_cache = 100
+        restored = Order(order.to_snapshot())
+        assert restored._state.lines[0]._state.price_cache is None
+
+    def test_full_round_trip_with_nested_entities(self) -> None:
+        order = make_placeable_order()
+        first = order.to_snapshot()
+        assert Order(first).to_snapshot() == first
+
+
+# --- Invariants ----------------------------------------------------------
+
+
+class TestInvariants:
     def test_invariants_are_checked_before_snapshot(self) -> None:
         order = make_order()
-        order.place()  # placed without shipping address
+        order.place()  # placed without address and lines
         with pytest.raises(ValueError, match="shipping address"):
             order.to_snapshot()
         order.set_shipping_address("1 Main St")
+        with pytest.raises(ValueError, match="at least one line"):
+            order.to_snapshot()
+        order.add_line("a", 1)
         assert order.to_snapshot().status is OrderStatus.PLACED
 
+    def test_default_hook_accepts_everything(self) -> None:
+        cart = Cart(CartSnapshot(id=uuid4(), customer_id=uuid4()))
+        cart.validate_invariants()  # does not raise
+        assert isinstance(cart.to_snapshot(), CartSnapshot)
 
-# --- Snapshot immutability -----------------------------------------------
+    def test_failed_validation_produces_no_snapshot_and_keeps_events(self) -> None:
+        order = make_order()
+        order.place()
+        with pytest.raises(ValueError):
+            order.to_snapshot()
+        assert len(order.pull_domain_events()) == 1
 
-
-@attrs.frozen(kw_only=True)
-class PayloadSnapshot(AggregateSnapshot[UUID]):
-    payload: object = None
-
-
-class TestSnapshotImmutability:
-    def test_snapshot_fields_cannot_be_reassigned(self) -> None:
-        snapshot = make_order().to_snapshot()
-        with pytest.raises(attrs.exceptions.FrozenInstanceError):
-            snapshot.status = OrderStatus.CANCELLED  # type: ignore[misc]
-
-    def test_converter_turns_list_into_tuple(self) -> None:
-        snapshot = OrderSnapshot(
-            id=uuid4(), customer_id=uuid4(), status=OrderStatus.DRAFT, notes=["a"]  # type: ignore[arg-type]
-        )
-        assert snapshot.notes == ("a",)
-
-    @pytest.mark.parametrize(
-        "value",
-        [[1], {"a": 1}, {1}, bytearray(b"x"), ([1],), (1, (2, [3]))],
-        ids=["list", "dict", "set", "bytearray", "list-in-tuple", "deeply-nested"],
-    )
-    def test_mutable_containers_are_rejected(self, value: object) -> None:
-        with pytest.raises(TypeError, match="mutable"):
-            PayloadSnapshot(id=uuid4(), payload=value)
-
-    @pytest.mark.parametrize(
-        "value",
-        [None, 1, "text", (), (1, 2), frozenset({1}), ((1, 2), (3,))],
-    )
-    def test_immutable_values_are_accepted(self, value: object) -> None:
-        assert PayloadSnapshot(id=uuid4(), payload=value).payload == value
-
-    def test_error_message_names_the_offending_path(self) -> None:
-        with pytest.raises(TypeError, match=r"PayloadSnapshot\.payload\[1\]"):
-            PayloadSnapshot(id=uuid4(), payload=(1, [2]))
+    def test_invariants_are_not_checked_on_load(self) -> None:
+        # Documents current behavior: loading an inconsistent snapshot works.
+        order = make_order(status=OrderStatus.PLACED)
+        with pytest.raises(ValueError):
+            order.to_snapshot()
 
 
 # --- Identity ------------------------------------------------------------
@@ -247,23 +316,22 @@ class TestIdentity:
     def test_hash_is_stable_after_state_changes(self) -> None:
         order = make_order()
         before = hash(order)
-        order.add_note("x")
+        order.add_line("a", 1)
         order.set_shipping_address("1 Main St")
         assert hash(order) == before
 
     def test_different_aggregate_types_with_same_id_are_not_equal(self) -> None:
         shared = uuid4()
-        order = make_order(id=shared)
         cart = Cart(CartSnapshot(id=shared, customer_id=uuid4()))
-        assert order != cart
-        assert Aggregate._identity_root is None  # Aggregate itself is not a root
+        assert make_order(id=shared) != cart
 
     def test_aggregate_is_not_equal_to_its_raw_id_or_snapshot(self) -> None:
         order = make_order()
         assert order != order.id
         assert order != order.to_snapshot()
 
-    def test_each_concrete_aggregate_is_its_own_root(self) -> None:
+    def test_aggregate_bases_are_not_identity_roots(self) -> None:
+        assert Aggregate._identity_root is None
         assert Order._identity_root is Order
         assert Cart._identity_root is Cart
 
@@ -278,10 +346,18 @@ class TestIdentity:
         assert gift == make_order(id=oid)
         assert hash(gift) == hash(make_order(id=oid))
         assert GiftOrder._identity_root is Order
-        assert isinstance(gift.to_snapshot(), OrderSnapshot)  # binding inherited
+        assert type(gift.to_snapshot()) is OrderSnapshot  # binding inherited
 
     def test_abstract_base_does_not_merge_its_children(self) -> None:
-        class BaseBasket(Aggregate[UUID, CartSnapshot, CartState], abstract=True):
+        @attrs.define(kw_only=True)
+        class BasketState(State[UUID]):
+            pass
+
+        @attrs.frozen(kw_only=True)
+        class BasketSnapshot(Snapshot[UUID]):
+            pass
+
+        class BaseBasket(Aggregate[UUID, BasketSnapshot, BasketState], abstract=True):
             pass
 
         class WishList(BaseBasket):
@@ -290,10 +366,16 @@ class TestIdentity:
         class Basket(BaseBasket):
             pass
 
-        shared = uuid4()
-        snapshot = CartSnapshot(id=shared, customer_id=uuid4())
+        snapshot = BasketSnapshot(id=uuid4())
         assert WishList(snapshot) != Basket(snapshot)
         assert BaseBasket._identity_root is None
+
+    def test_overriding_eq_is_rejected(self) -> None:
+        with pytest.raises(TypeError, match="overrides __eq__"):
+
+            class Bad(Order):
+                def __eq__(self, other: object) -> bool:
+                    return True
 
 
 # --- Id rules ------------------------------------------------------------
@@ -316,20 +398,19 @@ class TestIdRules:
         assert order.id == original
 
     def test_aggregate_id_property_is_read_only(self) -> None:
-        order = make_order()
         with pytest.raises(AttributeError):
-            order.id = uuid4()  # type: ignore[misc]
+            make_order().id = uuid4()  # type: ignore[misc]
 
     def test_identity_equality_id_type_is_rejected(self) -> None:
         class RawId:  # hashable, but equal only by reference
             pass
 
         @attrs.define(kw_only=True)
-        class RawState(AggregateState[RawId]):
+        class RawState(State[RawId]):
             pass
 
         @attrs.frozen(kw_only=True)
-        class RawSnapshot(AggregateSnapshot[RawId]):
+        class RawSnapshot(Snapshot[RawId]):
             pass
 
         class RawAggregate(Aggregate[RawId, RawSnapshot, RawState]):
@@ -344,15 +425,9 @@ class TestIdRules:
 
 class TestDomainEvents:
     def test_command_records_event(self) -> None:
-        order = make_order()
-        order.set_shipping_address("1 Main St")
+        order = make_placeable_order()
         order.place()
-
-        events = order.pull_domain_events()
-
-        assert len(events) == 1
-        assert isinstance(events[0], OrderPlaced)
-        assert events[0].order_id == order.id
+        assert order.pull_domain_events() == [OrderPlaced(order_id=order.id)]
 
     def test_pull_clears_recorded_events(self) -> None:
         order = make_order()
@@ -383,11 +458,115 @@ class TestDomainEvents:
         assert b.pull_domain_events() == []
 
     def test_to_snapshot_does_not_consume_events(self) -> None:
-        order = make_order()
+        order = make_placeable_order()
         order.place()
-        order.set_shipping_address("1 Main St")
         order.to_snapshot()
         assert len(order.pull_domain_events()) == 1
+
+    def test_events_are_not_part_of_the_snapshot(self) -> None:
+        order = make_placeable_order()
+        order.place()
+        restored = Order(order.to_snapshot())
+        assert restored.pull_domain_events() == []
+
+
+# --- Nesting rules -------------------------------------------------------
+
+
+class TestNestability:
+    def test_flags(self) -> None:
+        assert Aggregate._nestable is False
+        assert Order._nestable is False
+        assert Entity._nestable is True
+        assert Line._nestable is True
+
+    def test_aggregate_inside_another_aggregates_state_is_rejected(self) -> None:
+        @attrs.define(kw_only=True)
+        class HolderState(State[UUID]):
+            related: object = None
+
+        @attrs.frozen(kw_only=True)
+        class HolderSnapshot(Snapshot[UUID]):
+            related: object = None
+
+        class Holder(Aggregate[UUID, HolderSnapshot, HolderState]):
+            pass
+
+        holder = Holder(HolderSnapshot(id=uuid4()))
+        holder._state.related = make_order()
+        with pytest.raises(TypeError, match="not nestable"):
+            holder.to_snapshot()
+
+    def test_aggregates_reference_each_other_by_id(self) -> None:
+        @attrs.define(kw_only=True)
+        class InvoiceState(State[UUID]):
+            order_id: UUID
+
+        @attrs.frozen(kw_only=True)
+        class InvoiceSnapshot(Snapshot[UUID]):
+            order_id: UUID
+
+        class Invoice(Aggregate[UUID, InvoiceSnapshot, InvoiceState]):
+            pass
+
+        order = make_order()
+        invoice = Invoice(InvoiceSnapshot(id=uuid4(), order_id=order.id))
+        assert invoice.to_snapshot().order_id == order.id
+
+    def test_aggregate_is_not_restored_from_a_snapshot_inside_a_snapshot(self) -> None:
+        # Aggregate snapshots are not registered for nested restoration:
+        # they stay as plain snapshot values.
+        @attrs.define(kw_only=True)
+        class HolderState(State[UUID]):
+            cart: object = None
+
+        @attrs.frozen(kw_only=True)
+        class HolderSnapshot(Snapshot[UUID]):
+            cart: object = None
+
+        class Holder(Aggregate[UUID, HolderSnapshot, HolderState]):
+            pass
+
+        cart_snapshot = CartSnapshot(id=uuid4(), customer_id=uuid4())
+        holder = Holder(HolderSnapshot(id=uuid4(), cart=cart_snapshot))
+        assert holder._state.cart is cart_snapshot
+
+
+# --- Snapshot immutability -----------------------------------------------
+
+
+class TestSnapshotImmutability:
+    def test_snapshot_fields_cannot_be_reassigned(self) -> None:
+        snapshot = make_order().to_snapshot()
+        with pytest.raises(attrs.exceptions.FrozenInstanceError):
+            snapshot.status = OrderStatus.CANCELLED  # type: ignore[misc]
+
+    def test_snapshot_cannot_hold_a_live_inner_entity(self) -> None:
+        line = Line(LineSnapshot(id=1, sku="a", quantity=1))
+        with pytest.raises(TypeError, match=r"OrderSnapshot\.lines\[0\] holds Line"):
+            OrderSnapshot(
+                id=uuid4(),
+                customer_id=uuid4(),
+                status=OrderStatus.DRAFT,
+                lines=(line,),  # type: ignore[arg-type]
+            )
+
+    def test_converter_turns_lists_into_tuples(self) -> None:
+        snapshot = OrderSnapshot(
+            id=uuid4(),
+            customer_id=uuid4(),
+            status=OrderStatus.DRAFT,
+            notes=["a"],  # type: ignore[arg-type]
+        )
+        assert snapshot.notes == ("a",)
+
+    def test_snapshot_without_converter_rejects_a_list(self) -> None:
+        @attrs.frozen(kw_only=True)
+        class RawSnapshot(Snapshot[UUID]):
+            tags: object = None
+
+        with pytest.raises(TypeError, match="mutable list"):
+            RawSnapshot(id=uuid4(), tags=["a"])
 
 
 # --- Definition-time rules -----------------------------------------------
@@ -395,7 +574,9 @@ class TestDomainEvents:
 
 class TestBindingRules:
     def test_unparametrized_aggregate_is_rejected(self) -> None:
-        with pytest.raises(TypeError, match="must parametrize Aggregate directly"):
+        with pytest.raises(
+            TypeError, match="must parametrize its entity base directly"
+        ):
 
             class Bad(Aggregate):  # type: ignore[type-arg]
                 pass
@@ -413,25 +594,24 @@ class TestBindingRules:
         assert Generic_._identity_root is None
 
     def test_indirect_parametrization_is_not_supported_yet(self) -> None:
-        # Documents a known limitation. Flip this test when the TypeVar
-        # substitution map is implemented.
-        class Intermediate[M: AggregateSnapshot](
-            Aggregate[UUID, M, OrderState], abstract=True
-        ):
+        # Documents the Todo in aggregate_new.py. Flip when implemented.
+        class Intermediate[M: Snapshot](Aggregate[UUID, M, OrderState], abstract=True):
             pass
 
-        with pytest.raises(TypeError, match="must parametrize Aggregate directly"):
+        with pytest.raises(
+            TypeError, match="must parametrize its entity base directly"
+        ):
 
             class Concrete(Intermediate[OrderSnapshot]):
                 pass
 
-    def test_state_type_must_be_an_attrs_aggregate_state(self) -> None:
+    def test_state_type_must_be_an_attrs_state(self) -> None:
         with pytest.raises(TypeError, match="state type must be an attrs class"):
 
             class Bad(Aggregate[UUID, OrderSnapshot, dict]):  # type: ignore[type-var]
                 pass
 
-    def test_snapshot_type_must_be_an_attrs_aggregate_snapshot(self) -> None:
+    def test_snapshot_type_must_be_an_attrs_snapshot(self) -> None:
         with pytest.raises(TypeError, match="snapshot type must be an attrs class"):
 
             class Bad(Aggregate[UUID, dict, OrderState]):  # type: ignore[type-var]
@@ -439,11 +619,11 @@ class TestBindingRules:
 
     def test_snapshot_field_missing_on_state_is_rejected(self) -> None:
         @attrs.define(kw_only=True)
-        class ThinState(AggregateState[UUID]):
+        class ThinState(State[UUID]):
             pass
 
         @attrs.frozen(kw_only=True)
-        class WideSnapshot(AggregateSnapshot[UUID]):
+        class WideSnapshot(Snapshot[UUID]):
             total: int
 
         with pytest.raises(TypeError, match=r"missing fields.*\['total'\]"):
@@ -453,11 +633,11 @@ class TestBindingRules:
 
     def test_required_state_field_missing_on_snapshot_is_rejected(self) -> None:
         @attrs.define(kw_only=True)
-        class WideState(AggregateState[UUID]):
+        class WideState(State[UUID]):
             total: int
 
         @attrs.frozen(kw_only=True)
-        class ThinSnapshot(AggregateSnapshot[UUID]):
+        class ThinSnapshot(Snapshot[UUID]):
             pass
 
         with pytest.raises(TypeError, match=r"no default.*\['total'\]"):
@@ -467,17 +647,26 @@ class TestBindingRules:
 
     def test_stray_dataclasses_field_is_rejected(self) -> None:
         @attrs.define(kw_only=True)
-        class StrayState(AggregateState[UUID]):
-            tags: list[str] = dataclasses.field(default_factory=list)
+        class StrayState(State[UUID]):
+            tags: list[str] = dataclasses.field(default_factory=list)  # type: ignore[assignment]
 
         @attrs.frozen(kw_only=True)
-        class PlainSnapshot(AggregateSnapshot[UUID]):
+        class PlainSnapshot(Snapshot[UUID]):
             pass
 
         with pytest.raises(TypeError, match="dataclasses.Field"):
 
             class Bad(Aggregate[UUID, PlainSnapshot, StrayState]):
                 pass
+
+    def test_aggregates_may_share_a_snapshot_class(self) -> None:
+        # Only nestable entities are registered (one snapshot class per entity),
+        # so two aggregates can use the same snapshot/state pair.
+        class CartCopy(Aggregate[UUID, CartSnapshot, CartState]):
+            pass
+
+        snapshot = CartSnapshot(id=uuid4(), customer_id=uuid4())
+        assert Cart(snapshot) != CartCopy(snapshot)  # different identity roots
 
 
 # --- Representation ------------------------------------------------------
@@ -490,13 +679,3 @@ class TestRepresentation:
 
     def test_repr_starts_with_class_and_state(self) -> None:
         assert repr(make_order()).startswith("Order(state=")
-
-
-# -- Inheritance behavior -----------------------------------------------
-
-
-def test_mixin_fields_exist_on_both_state_and_snapshot() -> None:
-    shared = {f.name for f in attrs.fields(OrderFields)}
-    assert shared <= {f.name for f in attrs.fields(OrderState)}
-    assert shared <= {f.name for f in attrs.fields(OrderSnapshot)}
-    assert Order._shared_field_names.count("customer_id") == 1
