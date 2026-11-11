@@ -5,3 +5,5 @@
         members:
             - Entity
             - entity
+
+::: fast_ddd.domain.aggregate
