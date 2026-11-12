@@ -24,21 +24,23 @@ plugins:
             show_source: false
             show_root_heading: false # module name visibility
             show_root_full_path: false
-            merge_init_into_class: false
             members_order: source
             group_by_category: true
             show_signature: true
             show_signature_annotations: true
             extensions:
               - griffe_typingdoc
+            inherited_members: true #  include members inherited from base classes
+            merge_init_into_class: true
+            show_root_toc_entry: false # include module name in tabe of contents
   - mike
 
 markdown_extensions:
   # https://squidfunk.github.io/mkdocs-material/reference/tooltips/#adding-abbreviations
   - abbr # Adds hover tooltips for abbreviations defined with *[HTML]: ....
-  - attr_list
-  - pymdownx.snippets
-  - def_list
+  - attr_list # Adds custom classes to blocks so you can style them with CSS.
+  - pymdownx.snippets # Pulls shared text, such as a repeated warning, into several docstrings or pages.
+  - def_list # turns Markdown definition lists into HTML <dl> elements
   - footnotes # Supports [^1]-style footnotes.
   - md_in_html # Allows Markdown inside HTML blocks, such as <div markdown>.
   - toc: # Adds clickable anchor links to headings.
@@ -57,11 +59,13 @@ markdown_extensions:
       line_spans: __span
   - pymdownx.superfences # Fenced code blocks, nested fences, and custom fences such as Mermaid diagrams.
   - pymdownx.keys # Renders keyboard shortcuts such as ++ctrl+alt+del++.
-  - pymdownx.snippets # 	Includes content from other files with --8<-- "path".
+  - pymdownx.snippets # Includes content from other files with --8<-- "path".
+  - pymdownx.tabbed # Shows the same example in several languages or install methods.
 
 extra_css:
   - _stylesheets/code-light.css
   - _stylesheets/code-dark.css
+  - _stylesheets/extra.css
 
 theme:
   name: material

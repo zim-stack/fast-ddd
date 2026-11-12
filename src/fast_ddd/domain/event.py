@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from fast_ddd.base import BaseEvent
+from fast_ddd.common import BaseEvent
 
 # TODO: 8. Events and the rest of the library
 #   Domain events never touch state or snapshot machinery.

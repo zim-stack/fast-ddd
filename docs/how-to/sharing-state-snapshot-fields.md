@@ -62,3 +62,6 @@ a subclass to unfreeze a frozen base, so the state would become immutable too.
   mutable/immutable pair (`list`/`tuple`, `dict`/`Mapping`, `set`/`frozenset`)
   must be declared in each class.
 - Fields that exist only on the state need a default.
+
+### Recommendation: 
+attrs is the first-class choice when you want shared fields. Dataclasses are supported, but without field sharing.

@@ -1,0 +1,3 @@
+
+
+::: fast_ddd.common

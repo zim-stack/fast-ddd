@@ -1,20 +1,24 @@
 # https://git-scm.com/docs/githooks
+glob_matcher: doublestar
+
 # This hook is invoked by git-commit and git-merge,
 commit-msg:
   follow: true
   commands:
     format:
-      glob: "*.py"
+      glob: "**/*.py"
       run: uv run black {staged_files}
       stage_fixed: true # re-stage fixes
     lint:
-      glob: "*.py"
+      glob: "**/*.py"
       run: uv run ruff check --extend-select W --fix {staged_files}
       stage_fixed: true
     pyrefly:
-      run: uv run pyrefly check
+      glob: "**/*.py"
+      run: uv run pyrefly check {staged_files}
     mypy:
-      run: uv run mypy
+      glob: "**/persistence/**/*.py"
+      run: uv run mypy {staged_files}
 #    tach: # Todo uncomment when have modules defined
 #      run: |
 #        uv run tach check
