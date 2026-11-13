@@ -306,12 +306,15 @@ wheels = [
 name = "fast-ddd"
 version = "0.1.0"
 source = { editable = "." }
-dependencies = [
+
+[package.optional-dependencies]
+attrs = [
     { name = "attrs" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "attrs" },
     { name = "black" },
     { name = "lefthook" },
     { name = "mypy" },
@@ -338,10 +341,12 @@ docs = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "attrs", specifier = ">=26.1.0" }]
+requires-dist = [{ name = "attrs", marker = "extra == 'attrs'", specifier = ">=26.1.0" }]
+provides-extras = ["attrs"]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "attrs", specifier = ">=26.1.0" },
     { name = "black", specifier = ">=26.10.1" },
     { name = "lefthook", specifier = ">=2.2.2" },
     { name = "mypy", specifier = ">=2.4.1" },

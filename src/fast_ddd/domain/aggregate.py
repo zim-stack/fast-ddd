@@ -2,24 +2,61 @@ from abc import ABC
 from collections.abc import Hashable
 from typing import ClassVar, override
 
-from fast_ddd.domain.entity import Entity, Snapshot, State
+from fast_ddd.domain.entity import Entity, HasId
 from fast_ddd.domain.event import DomainEvent
 
 
 # Todo Support Indirect parametrization (isn’t supported).
 #  class Tok(Base[Snap, State]), where Base is a generic intermediate that itself parametrizes Aggregate, fails with “must parametrize Aggregate directly”.
 #  Resolving it needs a TypeVar substitution map.
-class Aggregate[TId: Hashable, M: Snapshot, S: State](
+class Aggregate[TId: Hashable, M: HasId, S: HasId](
     Entity[TId, M, S], ABC, abstract=True
 ):
     """Base class for aggregate roots.
 
-    Type Parameters:
-        TId: Type of the entity identifier.
-        M: Snapshot type returned by `to_snapshot()`.
-        S: Internal state type that holds internal mutable data.
+    An aggregate is an [`Entity`][fast_ddd.domain.entity.Entity] that is also a
+    consistency boundary. On top of the entity behavior (identity, typed state,
+    snapshots) it:
 
-    Intermediate abstract aggregates must be declared with `abstract=True`.
+    - records domain events with `record_event()`, which callers collect with
+      `pull_domain_events()`;
+    - validates its invariants in `validate_invariants()` before every
+      `to_snapshot()`, so an inconsistent aggregate is never persisted;
+    - can own inner entities in its state, which are converted to snapshots and
+      back automatically;
+    - cannot be nested inside another aggregate. Aggregates reference each other
+      by id.
+
+    Parametrize it directly with the id, snapshot and state types. The state and
+    snapshot may be attrs classes or dataclasses, in any combination. They are
+    validated once, when the subclass is defined. A subclass of a concrete
+    aggregate inherits that binding, and each concrete aggregate is its own
+    identity space. Intermediate bases that are never instantiated must be
+    declared with `abstract=True`.
+
+    Type Parameters:
+        TId: Type of the aggregate identifier.
+        M: Snapshot type returned by `to_snapshot()`. A frozen attrs class or
+            frozen dataclass with an `id` field.
+        S: Mutable state type, private to the aggregate as `_state`. An attrs
+            class or dataclass with an `id` field.
+
+    Note:
+        A concrete aggregate must name its types in its own base. Indirect
+        parametrization through a generic intermediate base is not supported
+        yet.
+
+    Examples:
+        ```python
+        class Order(Aggregate[UUID, OrderSnapshot, OrderState]):
+            def place(self) -> None:
+                self._state.placed = True
+                self.record_event(OrderPlaced(order_id=self.id))
+
+            def validate_invariants(self) -> None:
+                if self._state.placed and not self._state.lines:
+                    raise ValueError("a placed order needs at least one line")
+        ```
     """
 
     # Filled in by __init_subclass__; do not declare in subclasses.
@@ -51,11 +88,12 @@ class Aggregate[TId: Hashable, M: Snapshot, S: State](
     def validate_invariants(self) -> None:
         """Check aggregate invariants before a snapshot is taken.
 
-        The default implementation does nothing. Subclasses override this
-        method to enforce their own invariants.
+        Note:
+            This method is a hook, that runs before a snapshot is instantiated.
+            The default implementation does nothing. Subclasses override this
+            method to enforce their own invariants.
 
         Raises:
             Exception: Subclasses should raise when an invariant is violated.
                 Use the specific exception type your domain defines.
         """
-        pass

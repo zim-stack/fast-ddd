@@ -9,12 +9,10 @@ from uuid import uuid4
 import attrs
 import pytest
 
-from fast_ddd.domain.entity import Entity, EntityIdentity, Snapshot, State
+from fast_ddd.domain.entity import Entity, EntityIdentity
+from fast_ddd.domain.flavors.attrs_models import Snapshot, State
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
+# --- Fixtures (e-commerce) -----------------------------------------------
 # Snapshot classes are registered globally (one snapshot class per entity),
 # so every entity below owns a distinct snapshot class.
 
@@ -121,18 +119,28 @@ class AnyIdThing(Entity[object, AnyIdSnapshot, AnyIdState]):
     pass
 
 
+@attrs.define(kw_only=True)
+class PayloadState(State[int]):
+    payload: object = None
+
+
 @attrs.frozen(kw_only=True)
 class PayloadSnapshot(Snapshot[int]):
     payload: object = None
 
 
+class Payload(Entity[int, PayloadSnapshot, PayloadState]):
+    pass
+
+
+def make_payload(value: object) -> Payload:
+    """Immutability is validated when a snapshot reaches an entity."""
+    return Payload(PayloadSnapshot(id=1, payload=value))
+
+
 class Color(Enum):
     RED = 1
 
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 # --- Equality ------------------------------------------------------------
 
@@ -306,16 +314,16 @@ class TestIdRules:
         with pytest.raises(TypeError, match="must be hashable, got .*UnhashableId"):
             AnyIdThing(AnyIdSnapshot(id=UnhashableId(1)))
 
-    def test_mutable_container_id_is_rejected_by_snapshot_first(self) -> None:
-        with pytest.raises(TypeError, match="mutable list"):
-            AnyIdSnapshot(id=[1, 2])
+    def test_mutable_container_id_is_rejected_as_unhashable(self) -> None:
+        with pytest.raises(TypeError, match="must be hashable, got list"):
+            AnyIdThing(AnyIdSnapshot(id=[1, 2]))
 
     def test_non_frozen_dataclass_id_is_rejected(self) -> None:
         @dataclasses.dataclass(unsafe_hash=True)  # hashable, but mutable
         class MutableId:
             value: int
 
-        with pytest.raises(TypeError, match="must be frozen=True"):
+        with pytest.raises(TypeError, match="is a dataclass and must be frozen=True"):
             AnyIdThing(AnyIdSnapshot(id=MutableId(1)))
 
     def test_identity_equality_id_type_is_rejected(self) -> None:
@@ -522,7 +530,7 @@ class TestSnapshotImmutability:
     )
     def test_mutable_containers_are_rejected(self, value: object) -> None:
         with pytest.raises(TypeError, match="mutable"):
-            PayloadSnapshot(id=1, payload=value)
+            make_payload(value)
 
     @pytest.mark.parametrize(
         "value",
@@ -539,35 +547,37 @@ class TestSnapshotImmutability:
         ids=["none", "int", "str", "empty", "tuple", "frozenset", "nested", "mapping"],
     )
     def test_immutable_values_are_accepted(self, value: object) -> None:
-        assert PayloadSnapshot(id=1, payload=value).payload == value
+        assert make_payload(value)._state.payload == value
 
     def test_error_message_names_the_offending_path(self) -> None:
         with pytest.raises(TypeError, match=r"PayloadSnapshot\.payload\[1\]"):
-            PayloadSnapshot(id=1, payload=(1, [2]))
+            make_payload((1, [2]))
         with pytest.raises(TypeError, match=r"PayloadSnapshot\.payload\['a'\]"):
-            PayloadSnapshot(id=1, payload=MappingProxyType({"a": [2]}))
+            make_payload(MappingProxyType({"a": [2]}))
 
     def test_entity_inside_snapshot_is_rejected(self) -> None:
         with pytest.raises(TypeError, match="holds OrderLine; use its snapshot"):
-            PayloadSnapshot(id=1, payload=OrderLine.new())
+            make_payload(OrderLine.new())
 
     def test_entity_nested_in_containers_is_rejected(self) -> None:
         line = OrderLine.new()
         with pytest.raises(TypeError, match=r"payload\[0\] holds OrderLine"):
-            PayloadSnapshot(id=1, payload=(line,))
+            make_payload((line,))
         with pytest.raises(TypeError, match=r"payload\['k'\] holds OrderLine"):
-            PayloadSnapshot(id=1, payload=MappingProxyType({"k": line}))
+            make_payload(MappingProxyType({"k": line}))
         with pytest.raises(TypeError, match="holds OrderLine"):
-            PayloadSnapshot(id=1, payload=frozenset({line}))
+            make_payload(frozenset({line}))
 
     def test_state_object_inside_snapshot_is_rejected(self) -> None:
         state = OrderLineState(id=LineId(1, 1), sku="a", quantity=1)
         with pytest.raises(TypeError, match="holds OrderLineState"):
-            PayloadSnapshot(id=1, payload=state)
+            make_payload(state)
 
-    def test_nested_snapshots_are_accepted(self) -> None:
+    def test_nested_snapshots_are_accepted_and_restored_as_entities(self) -> None:
         line = OrderLine.new().to_snapshot()
-        assert PayloadSnapshot(id=1, payload=(line,)).payload == (line,)
+        (restored,) = make_payload((line,))._state.payload  # type: ignore[misc]
+        assert type(restored) is OrderLine
+        assert restored.to_snapshot() == line
 
 
 # --- Definition rules ----------------------------------------------------
@@ -625,7 +635,7 @@ class TestBindingRules:
         assert Generic_._identity_root is None
 
     def test_indirect_parametrization_is_not_supported_yet(self) -> None:
-        # Documents a known limitation (see the Todo in aggregate_new.py).
+        # Documents a known limitation (see the Todo in aggregate.py).
         # Flip this test when TypeVar substitution is implemented.
         class Intermediate[M: Snapshot](Entity[int, M, CouponState], abstract=True):
             pass
@@ -736,17 +746,13 @@ class TestBindingRules:
         assert isinstance(GiftLine.new().to_snapshot(), OrderLineSnapshot)
 
 
-# --- Known gaps ----------------------------------------------------------
+# --- Private field names -------------------------------------------------
 
 
-class TestKnownGaps:
-    @pytest.mark.xfail(
-        strict=True,
-        raises=TypeError,
-        reason="attrs strips the leading underscore from init keywords, "
-        "but the library builds kwargs from attribute names",
-    )
-    def test_private_field_names_are_not_supported_yet(self) -> None:
+class TestPrivateFieldNames:
+    def test_attrs_private_fields_round_trip(self) -> None:
+        # attrs strips the leading underscore from the __init__ keyword; the
+        # library uses the field alias, so private fields work.
         @attrs.define(kw_only=True)
         class PrivState(State[int]):
             _secret: str = ""
@@ -758,4 +764,157 @@ class TestKnownGaps:
         class Priv(Entity[int, PrivSnapshot, PrivState]):
             pass
 
-        Priv(PrivSnapshot(id=1, secret="x"))
+        entity = Priv(PrivSnapshot(id=1, secret="x"))
+        assert entity._state._secret == "x"
+        assert entity.to_snapshot()._secret == "x"
+
+
+# --- Boundary validation and definition rules (adapter-based) -------------
+
+
+class TestBoundaryValidation:
+    def test_wrong_snapshot_type_is_rejected(self) -> None:
+        with pytest.raises(TypeError, match="expects a CouponSnapshot"):
+            Coupon(OrderLineSnapshot(id=LineId(1, 1), sku="a", quantity=1))  # type: ignore[arg-type]
+
+    def test_state_value_that_cannot_be_frozen_fails_in_to_snapshot(self) -> None:
+        payload = make_payload(None)
+        payload._state.payload = bytearray(b"x")
+        with pytest.raises(TypeError, match="mutable bytearray"):
+            payload.to_snapshot()
+
+    def test_non_frozen_attrs_value_object_in_snapshot_is_rejected(self) -> None:
+        @attrs.define
+        class Money:
+            amount: int
+
+        with pytest.raises(
+            TypeError, match=r"holds a non-frozen Money; declare it with frozen=True"
+        ):
+            make_payload(Money(1))
+
+    def test_non_frozen_dataclass_value_object_in_snapshot_is_rejected(self) -> None:
+        @dataclasses.dataclass
+        class Money:
+            amount: int
+
+        with pytest.raises(TypeError, match="holds a non-frozen Money"):
+            make_payload(Money(1))
+
+    def test_frozen_value_object_holding_a_mutable_value_is_rejected(self) -> None:
+        @dataclasses.dataclass(frozen=True)
+        class Box:
+            items: list[int]
+
+        with pytest.raises(TypeError, match=r"payload\.items holds a mutable list"):
+            make_payload(Box([1]))
+
+    def test_frozen_value_objects_are_accepted_and_shared_not_copied(self) -> None:
+        @dataclasses.dataclass(frozen=True)
+        class Money:
+            amount: int
+
+        @attrs.frozen
+        class Tag:
+            label: str
+
+        money, tag = Money(5), Tag("x")
+        payload = make_payload((money, tag))
+        assert payload._state.payload[0] is money  # type: ignore[index]
+        assert payload._state.payload[1] is tag  # type: ignore[index]
+
+
+class TestIdFrozenness:
+    def test_non_frozen_attrs_id_is_rejected(self) -> None:
+        @attrs.define(unsafe_hash=True)  # hashable, but mutable
+        class MutableId:
+            value: int
+
+        with pytest.raises(
+            TypeError, match="is an attrs class and must be frozen=True"
+        ):
+            AnyIdThing(AnyIdSnapshot(id=MutableId(1)))
+
+    def test_frozen_attrs_id_is_accepted(self) -> None:
+        @attrs.frozen
+        class AttrsId:
+            value: int
+
+        assert AnyIdThing(AnyIdSnapshot(id=AttrsId(1))).id == AttrsId(1)
+
+
+class TestAdapterDefinitionRules:
+    def test_plain_class_is_not_a_valid_state_or_snapshot(self) -> None:
+        class Plain:
+            id: int
+
+        with pytest.raises(
+            TypeError, match="state type must be an attrs class or a dataclass"
+        ):
+
+            class Bad(Entity[int, CouponSnapshot, Plain]):  # type: ignore[type-var]
+                pass
+
+    def test_non_frozen_attrs_snapshot_is_rejected(self) -> None:
+        @attrs.define(kw_only=True)
+        class LooseSnapshot:
+            id: int
+
+        @attrs.define(kw_only=True)
+        class LooseState:
+            id: int
+
+        with pytest.raises(
+            TypeError,
+            match=r"snapshot type LooseSnapshot must be frozen \(frozen=True\)",
+        ):
+
+            class Bad(Entity[int, LooseSnapshot, LooseState]):
+                pass
+
+    def test_non_frozen_dataclass_snapshot_is_rejected(self) -> None:
+        @dataclasses.dataclass
+        class LooseSnapshot:
+            id: int
+
+        @dataclasses.dataclass
+        class LooseState:
+            id: int
+
+        with pytest.raises(TypeError, match="must be frozen"):
+
+            class Bad(Entity[int, LooseSnapshot, LooseState]):
+                pass
+
+    def test_missing_id_field_is_rejected(self) -> None:
+        @attrs.define(kw_only=True)
+        class NoIdState:
+            name: str = ""
+
+        @attrs.frozen(kw_only=True)
+        class NoIdSnapshot:
+            name: str = ""
+
+        with pytest.raises(TypeError, match="state type must define an `id` field"):
+
+            # pyrefly: ignore[bad-specialization]
+            class Bad(Entity[int, NoIdSnapshot, NoIdState]):  # noqa
+                pass
+
+    def test_abstract_entity_does_not_claim_the_snapshot(self) -> None:
+        @attrs.define(kw_only=True)
+        class ClaimState(State[int]):
+            pass
+
+        @attrs.frozen(kw_only=True)
+        class ClaimSnapshot(Snapshot[int]):
+            pass
+
+        class AbstractBase(Entity[int, ClaimSnapshot, ClaimState], abstract=True):
+            pass
+
+        class Concrete(Entity[int, ClaimSnapshot, ClaimState]):  # no "already paired"
+            pass
+
+        assert AbstractBase._identity_root is None
+        assert Concrete._identity_root is Concrete

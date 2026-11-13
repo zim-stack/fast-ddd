@@ -1,7 +1,16 @@
+## Requirements
+fast-ddd requires Python 3.13 or newer
+
 ## Installation
 
 ```shell
 pip install {{ project_name }}
+```
+
+If you want to declare states and snapshots with attrs, install the attrs extra:
+
+```shell
+pip install "fast-ddd[attrs]"
 ```
 
 ## Quick Start

@@ -7,21 +7,18 @@ import attrs
 import pytest
 
 from fast_ddd.domain.aggregate import Aggregate
-from fast_ddd.domain.entity import Entity, Snapshot, State
+from fast_ddd.domain.entity import Entity
+from fast_ddd.domain.flavors.attrs_models import Snapshot, State
 
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
+# --- Fixtures (e-commerce) -----------------------------------------------
+# Domain events are plain attrs classes: the tests only need them to be
+# recorded and returned.
 
 
 class OrderStatus(StrEnum):
     DRAFT = "draft"
     PLACED = "placed"
     CANCELLED = "cancelled"
-
-
-# Domain events are plain attrs classes: the tests only need them to be
-# recorded and returned.
 
 
 @attrs.frozen
@@ -543,13 +540,15 @@ class TestSnapshotImmutability:
 
     def test_snapshot_cannot_hold_a_live_inner_entity(self) -> None:
         line = Line(LineSnapshot(id=1, sku="a", quantity=1))
+        snapshot = OrderSnapshot(
+            id=uuid4(),
+            customer_id=uuid4(),
+            status=OrderStatus.DRAFT,
+            lines=(line,),  # type: ignore[arg-type]
+        )
+        # Validated when the snapshot reaches an aggregate.
         with pytest.raises(TypeError, match=r"OrderSnapshot\.lines\[0\] holds Line"):
-            OrderSnapshot(
-                id=uuid4(),
-                customer_id=uuid4(),
-                status=OrderStatus.DRAFT,
-                lines=(line,),  # type: ignore[arg-type]
-            )
+            Order(snapshot)
 
     def test_converter_turns_lists_into_tuples(self) -> None:
         snapshot = OrderSnapshot(
@@ -560,13 +559,20 @@ class TestSnapshotImmutability:
         )
         assert snapshot.notes == ("a",)
 
-    def test_snapshot_without_converter_rejects_a_list(self) -> None:
+    def test_snapshot_holding_a_list_is_rejected_by_the_aggregate(self) -> None:
+        @attrs.define(kw_only=True)
+        class RawState(State[UUID]):
+            tags: object = None
+
         @attrs.frozen(kw_only=True)
         class RawSnapshot(Snapshot[UUID]):
             tags: object = None
 
+        class Raw(Aggregate[UUID, RawSnapshot, RawState]):
+            pass
+
         with pytest.raises(TypeError, match="mutable list"):
-            RawSnapshot(id=uuid4(), tags=["a"])
+            Raw(RawSnapshot(id=uuid4(), tags=["a"]))
 
 
 # --- Definition-time rules -----------------------------------------------
@@ -594,7 +600,7 @@ class TestBindingRules:
         assert Generic_._identity_root is None
 
     def test_indirect_parametrization_is_not_supported_yet(self) -> None:
-        # Documents the Todo in aggregate_new.py. Flip when implemented.
+        # Documents the Todo in aggregate.py. Flip when implemented.
         class Intermediate[M: Snapshot](Aggregate[UUID, M, OrderState], abstract=True):
             pass
 

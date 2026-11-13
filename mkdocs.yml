@@ -54,13 +54,19 @@ markdown_extensions:
       anchor_linenums: true
       use_pygments: true
       #      auto_title: true
-      linenums: true
+      # keep line numbers to the individual fences:
+      # ```python linenums="1"
+      linenums: false
       linenums_style: table
       line_spans: __span
   - pymdownx.superfences # Fenced code blocks, nested fences, and custom fences such as Mermaid diagrams.
   - pymdownx.keys # Renders keyboard shortcuts such as ++ctrl+alt+del++.
-  - pymdownx.snippets # Includes content from other files with --8<-- "path".
-  - pymdownx.tabbed # Shows the same example in several languages or install methods.
+  - pymdownx.tabbed: # Shows the same example in several languages or install methods.
+      # Uses the newer tab markup (tabbed-labels) that Material's tab styling expects.
+      # Without it, tabs render as stacked blocks with unstyled labels.
+      alternate_style: true
+  - pymdownx.details # enables collapsible admonitions with ??? and ???+ syntax.
+  - admonition # render !!! note as a styled admonition
 
 extra_css:
   - _stylesheets/code-light.css
@@ -98,7 +104,7 @@ theme:
     - search.suggest # shows suggestions while typing
     - search.highlight # highlights matches on the page
     - search.share # adds a link that opens search results
-    - pymdownx.details # enables collapsible admonitions with ??? and ???+ syntax.
+
 
   palette:
     # Palette toggle for automatic mode
