@@ -1,3 +1,8 @@
+---
+hide:
+  - navigation
+---
+
 # Fast DDD
 
 **Domain-Driven Design for FastAPI services.**
@@ -74,19 +79,19 @@ and commits through the unit of work. It never touches the database directly.
 logic is complex enough that the domain model should not be tied to the database schema.
 
 If your service is mostly CRUD, an Active Record framework such as Django
-(with its admin) is probably the better choice. See [Motivation](motivation.md)
-for the full reasoning and the [trade-offs](concepts/when-not-to-use-this.md).
+(with its admin) is probably the better choice. See [Motivation](about/motivation.md)
+for the full reasoning and the [trade-offs](learn/concepts/when-not-to-use-this.md).
 
 
 ## Where to go next
 
 | I want to...                         | Go to                                         |
 | ------------------------------------ | --------------------------------------------- |
-| Understand why this exists           | [Motivation](motivation.md)                   |
+| Understand why this exists           | [Motivation](about/motivation.md)                   |
 | Get something running in 5 minutes   | [Quickstart](getting-started.md)   |
-| Learn step by step                   | [Tutorial](tutorial/index.md)                 |
-| Understand the concepts              | [Concepts](concepts/ddd-primer.md)            |
-| Solve a specific problem             | [How-to guides](how-to/add-a-field.md)        |
+| Learn step by step                   | [Tutorial](learn/tutorial/index.md)                 |
+| Understand the concepts              | [Concepts](learn/concepts/ddd-primer.md)            |
+| Solve a specific problem             | [How-to guides](learn/how-to/add-a-field.md)        |
 <!--
 | Look up the API                      | [Reference](reference/aggregate.md)           |
 -->

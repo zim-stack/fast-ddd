@@ -1,3 +1,8 @@
+---
+hide:
+  - navigation
+---
+
 ## Requirements
 fast-ddd requires Python 3.13 or newer
 
@@ -24,4 +29,4 @@ A complete file you can copy, plus run command
 Where does everything go?
 
 
-It works, now go to the [tutorial](tutorial/index.md).
+It works, now go to the [tutorial](learn/tutorial/index.md).

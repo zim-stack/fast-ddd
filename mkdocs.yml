@@ -90,7 +90,7 @@ theme:
     - navigation.instant.prefetch # preloads pages on hover
     - navigation.instant.progress # shows a loading bar
     - navigation.tabs # puts top-level sections in a tab bar
-    - navigation.sections # groups sidebar sections.
+    #    - navigation.sections # When off - groups sidebar sections. When on - makes each top-level section in the sidebar a fixed, non-collapsible heading.
     - navigation.prune # renders only visible navigation entries, which reduces page size
     - navigation.path # adds breadcrumbs
     - navigation.indexes # lets a section title link to its index page.
