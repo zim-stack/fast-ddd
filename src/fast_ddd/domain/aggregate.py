@@ -3,7 +3,7 @@ from collections.abc import Hashable
 from typing import ClassVar, override
 
 from fast_ddd.domain.entity import Entity, HasId
-from fast_ddd.domain.event import DomainEvent
+from fast_ddd.domain.events import DomainEvent
 
 
 class Aggregate[TId: Hashable, M: HasId, S: HasId](
