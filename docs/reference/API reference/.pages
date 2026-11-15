@@ -11,4 +11,5 @@ title: API Reference
 
 nav:
   - domain.md
+  - application.md
   - common.md
