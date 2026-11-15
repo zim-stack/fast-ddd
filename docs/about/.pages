@@ -1,6 +1,7 @@
 title: About
 
 nav:
+  - motivation.md
   - contributing.md
   - changelog.md
   - roadmap.md

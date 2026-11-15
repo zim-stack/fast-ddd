@@ -87,3 +87,11 @@ lefthook.command: ## Run single commit-msg command (example lint)
 .PHONY: lefthook.run
 lefthook.run: ## Run commit-msg hook
 	uv run lefthook run commit-msg
+
+
+# -------------------------------------------
+# Development
+# -------------------------------------------
+
+deps.sync:
+	uv sync --extra attrs --group docs

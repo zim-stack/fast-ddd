@@ -1,3 +1,8 @@
+---
+hide:
+  - navigation
+---
+
 # Fast DDD
 
 **Domain-Driven Design for FastAPI services.**
@@ -12,6 +17,8 @@ plain Python objects and can be tested without a database.
 ## Key features
 
 - **Domain building blocks**: `Aggregate`, `Entity`, `ValueObject`.
+- **Private state, frozen snapshots**: aggregates keep their data private and
+  hand out immutable snapshots, declared with dataclasses or attrs.
 - **Persistence-ignorant domain**: the domain model knows nothing about tables or sessions.
 - **Repository and Unit of Work**: a clear way to load, save, and commit changes.
 - **FastAPI integration**: dependency-injection-friendly, so it fits normal FastAPI code.
@@ -28,24 +35,45 @@ Supports python version 3.13 and later.
 pip install {{ project_name }}
 ```
 
-## A minimal example
+The attrs flavor is an optional extra: `pip install "fast-ddd[attrs]"`.
 
-<!-- Teaser: “this is what the code looks like”, incomplete -->
+## Overview
+
+<!-- Teaser: Minimal example, “this is what the code looks like”, incomplete -->
 
 ```python
 from dataclasses import dataclass
-from {{ import_name }} import Aggregate, ValueObject, Uow
+
+from {{ import_name }} import ValueObject, Uow
+from {{ import_name }}.domain.aggregate import Aggregate
+from {{ import_name }}.domain.flavors.dataclass_models import (
+    DataclassSnapshot,
+    DataclassState,
+)
+
 
 class Money(ValueObject):
     amount: int
     currency: str
     
-class Order(Aggregate):
+
+@dataclass(kw_only=True)
+class OrderState(DataclassState[int]):  # mutable, private to the aggregate
+    paid: bool = False
+
+
+@dataclass(frozen=True, kw_only=True)
+class OrderSnapshot(DataclassSnapshot[int]):  # frozen: what gets persisted
+    paid: bool = False
+
+
+class Order(Aggregate[int, OrderSnapshot, OrderState]):
     
     def pay(self) -> None:
         # business rules and invariants live here, not in the API layer
         ...
         
+
 @dataclass(frozen=True)
 class PayOrderPayload:
     order_id: int
@@ -74,30 +102,20 @@ and commits through the unit of work. It never touches the database directly.
 logic is complex enough that the domain model should not be tied to the database schema.
 
 If your service is mostly CRUD, an Active Record framework such as Django
-(with its admin) is probably the better choice. See [Motivation](motivation.md)
-for the full reasoning and the [trade-offs](concepts/when-not-to-use-this.md).
+(with its admin) is probably the better choice. See [Motivation](about/motivation.md)
+for the full reasoning and the [trade-offs](learn/concepts/when-not-to-use-this.md).
 
 
 ## Where to go next
 
 | I want to...                         | Go to                                         |
 | ------------------------------------ | --------------------------------------------- |
-| Understand why this exists           | [Motivation](motivation.md)                   |
-| Get something running in 5 minutes   | [Quickstart](getting-started.md)   |
-| Learn step by step                   | [Tutorial](tutorial/index.md)                 |
-| Understand the concepts              | [Concepts](concepts/ddd-primer.md)            |
-| Solve a specific problem             | [How-to guides](how-to/add-a-field.md)        |
+| Understand why this exists           | [Motivation](about/motivation.md)                   |
+| Get something running in 5 minutes   | [Quickstart](learn/getting-started.md)   |
+| Learn step by step                   | [Tutorial](learn/tutorial/index.md)                 |
+| Understand the concepts              | [Concepts](learn/concepts/ddd-primer.md)            |
+| Model entities and aggregates        | [Entities and aggregates](learn/concepts/entities-and-aggregates.md) |
+| Solve a specific problem             | [How-to guides](learn/how-to/add-a-field.md)        |
 <!--
 | Look up the API                      | [Reference](reference/aggregate.md)           |
--->
-
-<!-- 
-Reader journey
-```txt
- index ──► getting-started ──► tutorial ──► how-to
-   │                              │            │
-   │                              ▼            ▼
-   └──► motivation ──────────► concepts ──► reference
-        (why?)                (deep why)    (lookup)
-```
 -->

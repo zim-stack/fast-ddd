@@ -1,0 +1,9 @@
+title: Concepts
+
+nav:
+  - active-record-vs-domain-model.md
+  - ddd-primer.md
+  - entities-and-aggregates.md
+  - persistence.md
+  - transactions-and-consistency.md
+  - when-not-to-use-this.md

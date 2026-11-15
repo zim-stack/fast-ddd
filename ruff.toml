@@ -8,16 +8,17 @@ exclude = [
 
 [lint]
 ignore = [
-#    "F401",
-#    "F841",
+    #    "F401",
+    #    "F841",
 ]
 select = [
-#    "E", # black handles formatting
-#    "W", # black handles formatting or applied flag "--extend-select W" in lefthook
+    #    "E", # black handles formatting
+    #    "W", # black handles formatting or applied flag "--extend-select W" in lefthook
     "F",
     "I",
     "C",
     "UP",
+    "PIE790"
 ]
 
 [lint.per-file-ignores]
@@ -26,8 +27,8 @@ select = [
     "F403",
 ]
 "tests/**" = [
-#    "F401",
-#    "F841",
+    #    "F401",
+    #    "F841",
 ]
 "alchemy_manifest.py" = [
     "F401",

@@ -13,32 +13,35 @@ plugins:
   - drawio:
       darkmode: true
       edit: false
+      toolbar: false
   # https://mkdocstrings.github.io/python/usage/
   - mkdocstrings:
       handlers:
         python:
           paths: [ ./src ]
           options:
-            docstring_style: sphinx
-            docstring_section_style: spacy
+            docstring_style: google # `sphinx` does not support Examples section
+            docstring_section_style: list # Todo check if fixed https://github.com/mkdocstrings/python/issues/349
             show_source: false
             show_root_heading: false # module name visibility
             show_root_full_path: false
-            merge_init_into_class: false
             members_order: source
             group_by_category: true
             show_signature: true
             show_signature_annotations: true
             extensions:
               - griffe_typingdoc
+            inherited_members: true #  include members inherited from base classes
+            merge_init_into_class: true
+            show_root_toc_entry: false # include module name in tabe of contents
   - mike
 
 markdown_extensions:
   # https://squidfunk.github.io/mkdocs-material/reference/tooltips/#adding-abbreviations
   - abbr # Adds hover tooltips for abbreviations defined with *[HTML]: ....
-  - attr_list
-  - pymdownx.snippets
-  - def_list
+  - attr_list # Adds custom classes to blocks so you can style them with CSS.
+  - pymdownx.snippets # Pulls shared text, such as a repeated warning, into several docstrings or pages.
+  - def_list # turns Markdown definition lists into HTML <dl> elements
   - footnotes # Supports [^1]-style footnotes.
   - md_in_html # Allows Markdown inside HTML blocks, such as <div markdown>.
   - toc: # Adds clickable anchor links to headings.
@@ -51,17 +54,25 @@ markdown_extensions:
   - pymdownx.highlight: # Syntax highlighting through Pygments, with line numbers, auto titles, and line anchors.
       anchor_linenums: true
       use_pygments: true
-#      auto_title: true
-      linenums: true
+      #      auto_title: true
+      # keep line numbers to the individual fences:
+      # ```python linenums="1"
+      linenums: false
       linenums_style: table
       line_spans: __span
   - pymdownx.superfences # Fenced code blocks, nested fences, and custom fences such as Mermaid diagrams.
   - pymdownx.keys # Renders keyboard shortcuts such as ++ctrl+alt+del++.
-  - pymdownx.snippets # 	Includes content from other files with --8<-- "path".
+  - pymdownx.tabbed: # Shows the same example in several languages or install methods.
+      # Uses the newer tab markup (tabbed-labels) that Material's tab styling expects.
+      # Without it, tabs render as stacked blocks with unstyled labels.
+      alternate_style: true
+  - pymdownx.details # enables collapsible admonitions with ??? and ???+ syntax.
+  - admonition # render !!! note as a styled admonition
 
 extra_css:
   - _stylesheets/code-light.css
   - _stylesheets/code-dark.css
+  - _stylesheets/extra.css
 
 theme:
   name: material
@@ -80,21 +91,21 @@ theme:
     - navigation.instant.prefetch # preloads pages on hover
     - navigation.instant.progress # shows a loading bar
     - navigation.tabs # puts top-level sections in a tab bar
-    - navigation.sections # groups sidebar sections.
+    #    - navigation.sections # When off - groups sidebar sections. When on - makes each top-level section in the sidebar a fixed, non-collapsible heading.
     - navigation.prune # renders only visible navigation entries, which reduces page size
     - navigation.path # adds breadcrumbs
     - navigation.indexes # lets a section title link to its index page.
     - navigation.tabs.sticky # keeps the tab bar visible while scrolling.
-#    - navigation.top # adds a back-to-top button
+    #    - navigation.top # adds a back-to-top button
     - navigation.footer # adds previous and next links at the bottom.
     # Table of contents and header
     - toc.follow # keeps the active section visible in the sidebar while scrolling.
-#    - header.autohide # hides the header when scrolling down.
+    #    - header.autohide # hides the header when scrolling down.
     # Search
     - search.suggest # shows suggestions while typing
     - search.highlight # highlights matches on the page
     - search.share # adds a link that opens search results
-    - pymdownx.details # enables collapsible admonitions with ??? and ???+ syntax.
+
 
   palette:
     # Palette toggle for automatic mode
