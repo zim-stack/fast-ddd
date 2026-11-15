@@ -246,7 +246,7 @@ class Entity[TId: Hashable, M: HasId, S: HasId](
     def __init_subclass__(cls, *, abstract: bool = False, **kwargs: Any) -> None:
         super().__init_subclass__(abstract=abstract, **kwargs)
 
-        resolved = _distinct(_entity_args(cls))
+        resolved = _EntityBindingResolver(cls).resolve()
         if not resolved:
             if not abstract and not hasattr(cls, "_state_cls"):
                 raise TypeError(
@@ -273,7 +273,7 @@ class Entity[TId: Hashable, M: HasId, S: HasId](
                 )
             return
 
-        _bind_types(cls, snapshot_cls, state_cls, abstract=abstract)
+        _TypeBinder(cls, snapshot_cls, state_cls, abstract=abstract).bind()
 
     def __init__(self, snapshot: M) -> None:
         if not isinstance(snapshot, self._snapshot_cls):
@@ -359,66 +359,70 @@ _STATE_KINDS: dict[Any, type] = {
 _SEQUENCE_LIKE = (Sequence, AbstractSet, Collection, Iterable)
 
 
-# region: resolver # todo make a class
-def _subst(arg: Any, mapping: dict[Any, Any]) -> Any:
-    """Replace known TypeVars in a type argument, also inside generic aliases."""
-    if isinstance(arg, TypeVar):
-        return mapping.get(arg, arg)
-    params = getattr(arg, "__parameters__", ())
-    if params and get_origin(arg) is not None:  # an alias such as Snap[M]
-        return arg[tuple(_subst(p, mapping) for p in params)]
-    return arg
+class _EntityBindingResolver:
+    """Finds the (TId, M, S) arguments a class binds through its generic bases."""
 
+    def __init__(self, cls: type) -> None:
+        self._cls = cls
 
-def _walk(base: Any, mapping: dict[Any, Any]) -> list[tuple[Any, ...]]:
-    """Resolve one base to the (TId, M, S) arguments of `Entity`, if it leads there.
+    def resolve(self) -> list[tuple[Any, ...]]:
+        """Return the distinct (TId, M, S) bindings the class's own bases resolve to."""
+        return self._dedupe(self._from_bases(self._cls, {}))
 
-    `mapping` says which argument each TypeVar of the class that declared
-    `base` received, so a generic intermediate such as `User[M, S]` hands its
-    arguments up the chain until `Entity[...]` is reached. `Aggregate` is just
-    one such intermediate.
-    """
-    origin = get_origin(base) or base
-    if not (isinstance(origin, type) and issubclass(origin, Entity)):
-        return []
-    args = tuple(_subst(a, mapping) for a in get_args(base))
-    if origin is Entity:
-        return [args] if len(args) == 3 else []
-    params = getattr(origin, "__parameters__", ())
-    if not params:  # a plain class: its binding, if any, is inherited
-        return []
-    inner = dict(zip(params, args))  # unsubscripted generic -> {} -> stays open
-    found: list[tuple[Any, ...]] = []
-    for parent in origin.__dict__.get("__orig_bases__", origin.__bases__):
-        found += _walk(parent, inner)
-    return found
+    @classmethod
+    def _from_bases(cls, owner: type, mapping: dict[Any, Any]) -> list[tuple[Any, ...]]:
+        """Walk the direct bases declared by `owner`, collecting every Entity binding."""
+        found: list[tuple[Any, ...]] = []
+        for base in owner.__dict__.get("__orig_bases__", owner.__bases__):
+            found += cls._walk(base, mapping)
+        return found
 
+    @classmethod
+    def _walk(cls, base: Any, mapping: dict[Any, Any]) -> list[tuple[Any, ...]]:
+        """Resolve one base to the (TId, M, S) arguments of `Entity`, if it leads there.
 
-def _entity_args(cls: type) -> list[tuple[Any, ...]]:
-    """Return every (TId, M, S) that cls's own generic bases resolve to."""
-    found: list[tuple[Any, ...]] = []
-    for base in cls.__dict__.get("__orig_bases__", cls.__bases__):
-        found += _walk(base, {})
-    return found
+        `mapping` says which argument each TypeVar of the class that declared
+        `base` received, so a generic intermediate such as `User[M, S]` hands its
+        arguments up the chain until `Entity[...]` is reached. `Aggregate` is just
+        one such intermediate.
+        """
+        origin = get_origin(base) or base
+        if not (isinstance(origin, type) and issubclass(origin, Entity)):
+            return []
+        args = tuple(cls._subst(a, mapping) for a in get_args(base))
+        if origin is Entity:
+            return [args] if len(args) == 3 else []
+        params = getattr(origin, "__parameters__", ())
+        if not params:  # a plain class: its binding, if any, is inherited
+            return []
+        # An unsubscripted generic maps to {}, so its TypeVars stay open.
+        return cls._from_bases(origin, dict(zip(params, args)))
 
+    @classmethod
+    def _subst(cls, arg: Any, mapping: dict[Any, Any]) -> Any:
+        """Replace known TypeVars in a type argument, also inside generic aliases."""
+        if isinstance(arg, TypeVar):
+            return mapping.get(arg, arg)
+        params = getattr(arg, "__parameters__", ())
+        if params and get_origin(arg) is not None:  # an alias such as Snap[M]
+            return arg[tuple(cls._subst(p, mapping) for p in params)]
+        return arg
 
-def _distinct(found: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
-    """Drop repeated resolutions.
+    @staticmethod
+    def _dedupe(found: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
+        """Drop repeated resolutions.
 
-    Arguments are compared by their origin class, because that is what gets
-    bound: `Snap[str]` and `Snap[int]` are the same snapshot class.
-    """
-    unique: list[tuple[Any, ...]] = []
-    seen: list[tuple[Any, ...]] = []
-    for args in found:
-        key = tuple(get_origin(a) or a for a in args)
-        if key not in seen:
-            seen.append(key)
-            unique.append(args)
-    return unique
-
-
-# endregion
+        Arguments are compared by their origin class, because that is what gets
+        bound: `Snap[str]` and `Snap[int]` are the same snapshot class.
+        """
+        unique: list[tuple[Any, ...]] = []
+        seen: list[tuple[Any, ...]] = []
+        for args in found:
+            key = tuple(get_origin(a) or a for a in args)
+            if key not in seen:
+                seen.append(key)
+                unique.append(args)
+        return unique
 
 
 def _describe(args: tuple[Any, ...]) -> str:
@@ -566,17 +570,6 @@ class _TypeBinder:
             for f in self.snapshot_fields
             if f.init
         )
-
-
-def _bind_types(
-    cls: type[Entity[Any, Any, Any]],
-    snapshot_cls: Any,
-    state_cls: Any,
-    *,
-    abstract: bool,
-) -> None:
-    """Validate the state/snapshot pair once and cache what instances need."""
-    _TypeBinder(cls, snapshot_cls, state_cls, abstract=abstract).bind()
 
 
 # -- State <-> snapshot conversion ------------------------------------------
