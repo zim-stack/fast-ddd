@@ -580,9 +580,8 @@ class TestSnapshotImmutability:
 
 class TestBindingRules:
     def test_unparametrized_aggregate_is_rejected(self) -> None:
-        with pytest.raises(
-            TypeError, match="must parametrize its entity base directly"
-        ):
+        # An unsubscripted generic base leaves its type variables open.
+        with pytest.raises(TypeError, match="unresolved"):
 
             class Bad(Aggregate):  # type: ignore[type-arg]
                 pass
@@ -599,17 +598,16 @@ class TestBindingRules:
 
         assert Generic_._identity_root is None
 
-    def test_indirect_parametrization_is_not_supported_yet(self) -> None:
-        # Documents the Todo in aggregate.py. Flip when implemented.
+    def test_indirect_parametrization_binds_through_a_generic_base(self) -> None:
+        # More cases live in test_indirect_parametrization.py.
         class Intermediate[M: Snapshot](Aggregate[UUID, M, OrderState], abstract=True):
             pass
 
-        with pytest.raises(
-            TypeError, match="must parametrize its entity base directly"
-        ):
+        class Concrete(Intermediate[OrderSnapshot]):
+            pass
 
-            class Concrete(Intermediate[OrderSnapshot]):
-                pass
+        assert Concrete._snapshot_cls is OrderSnapshot
+        assert Concrete._state_cls is OrderState
 
     def test_state_type_must_be_an_attrs_state(self) -> None:
         with pytest.raises(TypeError, match="state type must be an attrs class"):

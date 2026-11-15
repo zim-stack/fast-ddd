@@ -615,9 +615,7 @@ class TestDefinitionRules:
 
 class TestBindingRules:
     def test_unparametrized_entity_is_rejected(self) -> None:
-        with pytest.raises(
-            TypeError, match="must parametrize its entity base directly"
-        ):
+        with pytest.raises(TypeError, match="must bind its snapshot and state types"):
 
             class Bad(Entity):  # type: ignore[type-arg]
                 pass
@@ -634,18 +632,24 @@ class TestBindingRules:
 
         assert Generic_._identity_root is None
 
-    def test_indirect_parametrization_is_not_supported_yet(self) -> None:
-        # Documents a known limitation (see the Todo in aggregate.py).
-        # Flip this test when TypeVar substitution is implemented.
-        class Intermediate[M: Snapshot](Entity[int, M, CouponState], abstract=True):
+    def test_indirect_parametrization_binds_through_a_generic_base(self) -> None:
+        # More cases live in test_indirect_parametrization.py.
+        @attrs.define(kw_only=True)
+        class IndirectState(State[int]):
+            code: str = ""
+
+        @attrs.frozen(kw_only=True)
+        class IndirectSnapshot(Snapshot[int]):
+            code: str = ""
+
+        class Intermediate[M: Snapshot](Entity[int, M, IndirectState], abstract=True):
             pass
 
-        with pytest.raises(
-            TypeError, match="must parametrize its entity base directly"
-        ):
+        class Concrete(Intermediate[IndirectSnapshot]):
+            pass
 
-            class Concrete(Intermediate[CouponSnapshot]):
-                pass
+        assert Concrete._snapshot_cls is IndirectSnapshot
+        assert Concrete._state_cls is IndirectState
 
     def test_state_type_must_be_an_attrs_state(self) -> None:
         with pytest.raises(TypeError, match="state type must be an attrs class"):

@@ -3,7 +3,8 @@
 This guide shows how to model entities and aggregates, and how to declare their
 state and snapshot with **attrs**, **dataclasses**, or a mix of both. The API
 reference lists every class and parameter; this page focuses on how the pieces
-fit together.
+fit together. If you are new to the library, the
+[tutorial](../tutorial/index.md) builds the same ideas step by step first.
 
 !!! note "Conventions on this page"
     - Code blocks run top to bottom as one script, so later blocks reuse names
@@ -50,8 +51,9 @@ library you prefer; both behave identically.
 
     import attrs
 
-    from fast_ddd.domain.aggregate import Aggregate
-    from fast_ddd.domain.entity import Entity, Snapshot, State
+    from {{ import_name }}.domain.aggregate import Aggregate
+    from {{ import_name }}.domain.entity import Entity
+    from {{ import_name }}.domain.flavors.attrs_models import Snapshot, State
 
 
     # --- Inner entity ------------------------------------------------------
@@ -124,11 +126,11 @@ library you prefer; both behave identically.
     from dataclasses import dataclass, field
     from uuid import UUID, uuid4
 
-    from fast_ddd.domain.aggregate import Aggregate
-    from fast_ddd.domain.entity import (
+    from {{ import_name }}.domain.aggregate import Aggregate
+    from {{ import_name }}.domain.entity import Entity
+    from {{ import_name }}.domain.flavors.dataclass_models import (
         DataclassSnapshot,
         DataclassState,
-        Entity,
     )
 
 
@@ -243,7 +245,9 @@ dataclass, with or without the optional base classes.
 | mixed | any of the above | any of the above | per class | depends on the state |
 
 The only requirements are: both classes have an `id` field, the snapshot is
-frozen, and every snapshot field also exists on the state.
+frozen, and every snapshot field also exists on the state. The FAQ explains
+[when to use the base classes and when to go structural](../faq/state-base-vs-structural.md)
+and [why attrs is optional](../faq/why-attrs.md).
 
 ### Structural classes (no base classes)
 
@@ -253,7 +257,7 @@ library checks the contract when the entity class is defined.
 ```python
 from dataclasses import dataclass
 
-from fast_ddd.domain.entity import Entity
+from {{ import_name }}.domain.entity import Entity
 
 
 @dataclass(kw_only=True)
@@ -296,7 +300,9 @@ The entity only needs the declared fields, so any pair works:
 import attrs
 from dataclasses import dataclass
 
-from fast_ddd.domain.entity import DataclassSnapshot, Entity, State
+from {{ import_name }}.domain.entity import Entity
+from {{ import_name }}.domain.flavors.attrs_models import State
+from {{ import_name }}.domain.flavors.dataclass_models import DataclassSnapshot
 
 
 @attrs.define(kw_only=True)
@@ -329,8 +335,8 @@ from uuid import UUID, uuid4
 
 import attrs
 
-from fast_ddd.domain.aggregate import Aggregate
-from fast_ddd.domain.entity import Snapshot, State
+from {{ import_name }}.domain.aggregate import Aggregate
+from {{ import_name }}.domain.flavors.attrs_models import Snapshot, State
 
 
 @attrs.define(kw_only=True)
@@ -368,6 +374,9 @@ assert refresh.to_snapshot().token == refresh.token
     non-frozen one (Python 3.13 and later reject it even when another base is
     frozen). With dataclasses, repeat the fields in the state and the snapshot.
 
+The how-to guide [Share fields between state and snapshot](../how-to/sharing-state-snapshot-fields.md)
+covers the rules, and a type checker warning you may see.
+
 ## Containers and nested entities
 
 A state field can hold entities in a `list`, `tuple`, `set`, `frozenset` or
@@ -404,8 +413,9 @@ from dataclasses import dataclass, field
 from types import MappingProxyType
 from uuid import UUID, uuid4
 
-from fast_ddd.domain.aggregate import Aggregate
-from fast_ddd.domain.entity import DataclassSnapshot, DataclassState, Entity
+from {{ import_name }}.domain.aggregate import Aggregate
+from {{ import_name }}.domain.entity import Entity
+from {{ import_name }}.domain.flavors.dataclass_models import DataclassSnapshot, DataclassState
 
 
 @dataclass(kw_only=True)
@@ -481,8 +491,8 @@ derived data.
 import attrs
 from uuid import UUID, uuid4
 
-from fast_ddd.domain.aggregate import Aggregate
-from fast_ddd.domain.entity import Snapshot, State
+from {{ import_name }}.domain.aggregate import Aggregate
+from {{ import_name }}.domain.flavors.attrs_models import Snapshot, State
 
 
 @attrs.define(kw_only=True)
@@ -555,6 +565,64 @@ class MobileCart(BaseCart):
 shared = CartSnapshot(id=uuid4())
 assert WebCart(shared) != MobileCart(shared)
 ```
+
+## Sharing behavior through a generic base
+
+Aggregates of different kinds often share behavior. Put it in a generic base
+declared with `abstract=True`, and let each concrete class pass its own snapshot
+and state:
+
+```python
+from dataclasses import dataclass
+from uuid import UUID, uuid4
+
+from {{ import_name }}.domain.aggregate import Aggregate
+from {{ import_name }}.domain.flavors.dataclass_models import DataclassSnapshot, DataclassState
+
+
+@dataclass(kw_only=True)
+class UserState(DataclassState[UUID]):
+    name: str
+    is_active: bool = True
+
+
+@dataclass(frozen=True, kw_only=True)
+class UserSnapshot(DataclassSnapshot[UUID]):
+    name: str
+    is_active: bool = True
+
+
+class User[M: UserSnapshot, S: UserState](Aggregate[UUID, M, S], abstract=True):
+    def deactivate(self) -> None:
+        self._state.is_active = False  # typed: S is bound to UserState
+
+
+@dataclass(kw_only=True)
+class CandidateState(UserState):
+    resume_url: str | None = None
+
+
+@dataclass(frozen=True, kw_only=True)
+class CandidateSnapshot(UserSnapshot):
+    resume_url: str | None = None
+
+
+class Candidate(User[CandidateSnapshot, CandidateState]):
+    pass
+
+
+candidate = Candidate(CandidateSnapshot(id=uuid4(), name="Ann"))
+candidate.deactivate()
+assert candidate.to_snapshot().is_active is False
+assert type(candidate.to_snapshot()) is CandidateSnapshot  # not the base snapshot
+```
+
+The library follows the type arguments up the chain until it reaches `Aggregate`
+(or `Entity`), so `Candidate` is bound exactly as if it had named the types
+itself. Each concrete subclass is its own identity space, and type checkers see
+the concrete types inside the shared code. The how-to guide
+[Share behavior with a generic base](../how-to/share-behavior-with-a-generic-base.md)
+has the full set of rules and error cases.
 
 !!! warning "Inner entity ids are local to their aggregate"
     `OrderLine(id=1)` in order A equals `OrderLine(id=1)` in order B. Do not mix
@@ -693,6 +761,8 @@ class Bad(Entity[int, LooseSnapshot, LooseState]):
 | State-only fields have a default or `init=False` | class definition |
 | `__eq__` / `__hash__` are not overridden | class definition |
 | A snapshot class belongs to one concrete entity | class definition |
+| A concrete class binds its snapshot and state types, directly or through generic bases; generic bases that leave types open are `abstract=True` | class definition |
+| Two generic bases must not resolve to different snapshot or state types | class definition |
 | Aggregates are not nested inside other aggregates | snapshot time |
 
 !!! info "Aggregates reference each other by id"
@@ -701,10 +771,10 @@ class Bad(Entity[int, LooseSnapshot, LooseState]):
 
 ## Limitations
 
-- **Parametrize directly.** A concrete class must name its types in its own
-  base, `Aggregate[UUID, MySnapshot, MyState]`. Indirect parametrization through
-  a generic intermediate base is not supported yet. Mark intermediate bases
-  with `abstract=True`.
+- **Type arguments must be classes.** A concrete class must reach `Entity[...]`
+  or `Aggregate[...]` with real classes, directly or through generic bases.
+  String forward references (`User["Snap", "State"]`) and PEP 695 `type` aliases
+  as type arguments are not supported; pass the classes themselves.
 - **One snapshot class per concrete entity.** A child class that needs to be
   restored as its own type when nested needs its own snapshot class.
 - **Dataclass flavor cannot share a fields mixin** between state and snapshot
@@ -716,3 +786,11 @@ class Bad(Entity[int, LooseSnapshot, LooseState]):
   mapping view is not hashable.
 - **Private attrs fields** (`_secret`) work and are passed through their
   `__init__` alias (`secret=`).
+
+## Related
+
+- [Tutorial](../tutorial/index.md): build an aggregate step by step.
+- [Test aggregates](../how-to/test-aggregates.md): patterns for fast domain tests.
+- [Share fields between state and snapshot](../how-to/sharing-state-snapshot-fields.md)
+- [Share behavior with a generic base](../how-to/share-behavior-with-a-generic-base.md)
+- [Glossary](../glossary.md)

@@ -136,9 +136,11 @@ class Entity[TId: Hashable, M: HasId, S: HasId](
     State and snapshot may be attrs classes or dataclasses, in any combination.
     The optional bases (`State`/`Snapshot` for attrs, `DataclassState`/
     `DataclassSnapshot` for dataclasses) add the `id` field and, for states,
-    protect it against reassignment. Parametrize the entity directly with its
-    types; they are validated once, when the class is defined. Intermediate
-    bases that are never instantiated must be declared with `abstract=True`.
+    protect it against reassignment. Bind the entity's types by parametrizing
+    `Entity` (or `Aggregate`) with them, directly or through a generic base that
+    passes them on. They are validated once, when the class is defined.
+    Intermediate bases that are never instantiated must be declared with
+    `abstract=True`.
 
     Only `id` is immutable after construction. All other state fields may
     change through the entity's methods.
@@ -182,10 +184,15 @@ class Entity[TId: Hashable, M: HasId, S: HasId](
         need globally unique identity, use a compound id such as
         `OrderLineId(order_id, line_no)`.
 
+    Note:
+        A generic base may leave some or all of the types open, as long as it is
+        declared with `abstract=True`. Each concrete subclass subscripts it with
+        its own snapshot and state, and type checkers then see the concrete
+        types inside the shared code. A class that inherits two generic bases
+        resolving to different types is rejected when the class is defined.
+
     Warning:
-        A concrete entity must name its types in its own base. Indirect
-        parametrization through a generic intermediate base is not supported
-        yet. A snapshot class belongs to exactly one concrete entity.
+        A snapshot class belongs to exactly one concrete entity.
 
     Examples:
         ```python
@@ -202,6 +209,20 @@ class Entity[TId: Hashable, M: HasId, S: HasId](
         class OrderLine(Entity[int, OrderLineSnapshot, OrderLineState]):
             def change_quantity(self, quantity: int) -> None:
                 self._state.quantity = quantity
+        ```
+
+        Binding the types through a generic base. The shared code sees the
+        bound `S`, and each concrete class passes its own types:
+
+        ```python
+        class Party[M: PartySnapshot, S: PartyState](
+            Entity[int, M, S], abstract=True
+        ):
+            def rename(self, name: str) -> None:
+                self._state.name = name
+
+        class Person(Party[PersonSnapshot, PersonState]):
+            pass
         ```
 
         An entity that holds other entities. The annotation decides that the
@@ -225,22 +246,30 @@ class Entity[TId: Hashable, M: HasId, S: HasId](
     def __init_subclass__(cls, *, abstract: bool = False, **kwargs: Any) -> None:
         super().__init_subclass__(abstract=abstract, **kwargs)
 
-        args = _generic_args(cls)
-        if args is None:
+        resolved = _distinct(_entity_args(cls))
+        if not resolved:
             if not abstract and not hasattr(cls, "_state_cls"):
                 raise TypeError(
-                    f"{cls.__qualname__} must parametrize its entity base directly, "
-                    "e.g. Entity[OrderLineId, MySnapshot, MyState], "
-                    "or be declared with abstract=True"
+                    f"{cls.__qualname__} must bind its snapshot and state types: "
+                    "parametrize Entity or Aggregate, directly or through a "
+                    "generic base (e.g. Entity[OrderLineId, MySnapshot, MyState]), "
+                    "or declare it with abstract=True"
                 )
             return
+        if len(resolved) > 1:
+            options = "; ".join(f"({_describe(r)})" for r in resolved)
+            raise TypeError(
+                f"{cls.__qualname__} inherits conflicting entity parametrizations: "
+                f"{options}"
+            )
 
-        _, snapshot_cls, state_cls = args
+        _, snapshot_cls, state_cls = resolved[0]
         if isinstance(snapshot_cls, TypeVar) or isinstance(state_cls, TypeVar):
             if not abstract:
                 raise TypeError(
                     f"{cls.__qualname__} leaves snapshot/state types unresolved; "
-                    "pass concrete types or declare it with abstract=True"
+                    "subscript every generic base with concrete types "
+                    "or declare it with abstract=True"
                 )
             return
 
@@ -330,15 +359,70 @@ _STATE_KINDS: dict[Any, type] = {
 _SEQUENCE_LIKE = (Sequence, AbstractSet, Collection, Iterable)
 
 
-def _generic_args(cls: type) -> tuple[Any, ...] | None:
-    """Return (TId, M, S) from a direct `Entity[...]`/`Aggregate[...]` base."""
-    for base in cls.__dict__.get("__orig_bases__", ()):
-        origin = get_origin(base)
-        if isinstance(origin, type) and issubclass(origin, Entity):
-            args = get_args(base)
-            if len(args) == 3:
-                return args
-    return None
+# region: resolver # todo make a class
+def _subst(arg: Any, mapping: dict[Any, Any]) -> Any:
+    """Replace known TypeVars in a type argument, also inside generic aliases."""
+    if isinstance(arg, TypeVar):
+        return mapping.get(arg, arg)
+    params = getattr(arg, "__parameters__", ())
+    if params and get_origin(arg) is not None:  # an alias such as Snap[M]
+        return arg[tuple(_subst(p, mapping) for p in params)]
+    return arg
+
+
+def _walk(base: Any, mapping: dict[Any, Any]) -> list[tuple[Any, ...]]:
+    """Resolve one base to the (TId, M, S) arguments of `Entity`, if it leads there.
+
+    `mapping` says which argument each TypeVar of the class that declared
+    `base` received, so a generic intermediate such as `User[M, S]` hands its
+    arguments up the chain until `Entity[...]` is reached. `Aggregate` is just
+    one such intermediate.
+    """
+    origin = get_origin(base) or base
+    if not (isinstance(origin, type) and issubclass(origin, Entity)):
+        return []
+    args = tuple(_subst(a, mapping) for a in get_args(base))
+    if origin is Entity:
+        return [args] if len(args) == 3 else []
+    params = getattr(origin, "__parameters__", ())
+    if not params:  # a plain class: its binding, if any, is inherited
+        return []
+    inner = dict(zip(params, args))  # unsubscripted generic -> {} -> stays open
+    found: list[tuple[Any, ...]] = []
+    for parent in origin.__dict__.get("__orig_bases__", origin.__bases__):
+        found += _walk(parent, inner)
+    return found
+
+
+def _entity_args(cls: type) -> list[tuple[Any, ...]]:
+    """Return every (TId, M, S) that cls's own generic bases resolve to."""
+    found: list[tuple[Any, ...]] = []
+    for base in cls.__dict__.get("__orig_bases__", cls.__bases__):
+        found += _walk(base, {})
+    return found
+
+
+def _distinct(found: list[tuple[Any, ...]]) -> list[tuple[Any, ...]]:
+    """Drop repeated resolutions.
+
+    Arguments are compared by their origin class, because that is what gets
+    bound: `Snap[str]` and `Snap[int]` are the same snapshot class.
+    """
+    unique: list[tuple[Any, ...]] = []
+    seen: list[tuple[Any, ...]] = []
+    for args in found:
+        key = tuple(get_origin(a) or a for a in args)
+        if key not in seen:
+            seen.append(key)
+            unique.append(args)
+    return unique
+
+
+# endregion
+
+
+def _describe(args: tuple[Any, ...]) -> str:
+    return ", ".join(getattr(a, "__qualname__", None) or repr(a) for a in args)
 
 
 class _TypeBinder:

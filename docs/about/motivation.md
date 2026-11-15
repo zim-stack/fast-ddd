@@ -24,6 +24,8 @@ For domains with complex business rules, Fowler recommends a Domain Model combin
 In DDD this means you first model the domain from business rules, and then design the database schema separately to suit storage and query needs ([Evans, 2003](#references)). Repository and Unit of Work then give the domain a persistence-ignorant way to load, save and commit changes ([Percival and Gregory, 2020](#references)).
 
 If your service is mostly CRUD, Active Record (and Django with its admin) is a sound choice. This project targets the other case: services, including small microservices, whose business logic is complex enough that the domain model should not be tied to the database schema.
+[When not to use this](../learn/concepts/when-not-to-use-this.md) helps you tell
+which case you are in.
 
 ### "But we don't do much upfront domain modeling"
 
@@ -47,6 +49,10 @@ buys independence and testability, and you pay for it.
 - **More code and more layers.** You write the domain classes, the
   persistence models (or tables) and the mapping between them. A simple
   "add a field" change may touch several places.
+- **State and snapshot classes.** Each aggregate and inner entity declares a
+  mutable state and a frozen snapshot. The classes are short and mechanical, and
+  a shared-fields mixin removes most of the repetition when you use attrs, but it
+  is still more to write than a single model class.
 - **Learning curve.** Teams need to understand aggregates, repositories,
   unit of work and persistence ignorance. Misapplied, DDD vocabulary
   produces ceremony without benefit.

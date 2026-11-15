@@ -13,6 +13,7 @@ plugins:
   - drawio:
       darkmode: true
       edit: false
+      toolbar: false
   # https://mkdocstrings.github.io/python/usage/
   - mkdocstrings:
       handlers:
